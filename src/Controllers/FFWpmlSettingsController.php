@@ -15,8 +15,11 @@ if (!defined('ABSPATH')) {
 
 class FFWpmlSettingsController
 {
-    public function __construct()
+    protected $app;
+    
+    public function __construct($app)
     {
+        $this->app = $app;
         $this->init();
     }
 
@@ -33,26 +36,20 @@ class FFWpmlSettingsController
 
     public function handleAdmin()
     {
-        add_filter('fluentform/form_settings_ajax', [$this, 'injectInFormSettings'], 10, 2);
+        $this->app->addAdminAjaxAction('fluentform_get_wpml_settings', [$this, 'getWpmlSettings']);
+        $this->app->addAdminAjaxAction('fluentform_store_wpml_settings', [$this, 'storeWpmlSettings']);
+        $this->app->addAdminAjaxAction('fluentform_delete_wpml_settings', [$this, 'removeWpmlSettings']);
+
+        add_action('fluentform/form_settings_menu',  [$this, 'pushSettings'], 10, 2);
         add_filter('fluentform/form_fields_update', [$this, 'handleFormFieldUpdate'], 10, 2);
-        add_action('fluentform/after_save_form_settings', [$this, 'saveFormSettings'], 10, 2);
-        add_action('fluentform/after_form_delete', [$this, 'clearWpmlSettings'], 10, 1);
+        add_action('fluentform/after_form_delete', [$this, 'removeAssociatedWpmlField'], 10, 1);
     }
-
-    public static function setRecaptchaLanguage($language)
+    
+    public function getWpmlSettings()
     {
-        $currentLanguage = FFWpmlHelper::getCurrentLanguage();
-        $allowed = Helper::locales('captcha');
-
-        if (isset($allowed[$currentLanguage])) {
-            $language = $currentLanguage;
-        }
-
-        return $language;
-    }
-
-    public function injectInFormSettings($settings, $formId)
-    {
+        $request = $this->app->request->get();
+        $formId = ArrayHelper::get($request, 'form_id');
+        $wpmlSettings = [];
         try {
             global $sitepress;
             $form = Form::find($formId);
@@ -73,7 +70,7 @@ class FFWpmlSettingsController
                 'enabled'             => 'no'
             ];
 
-            $wpmlSettings = Helper::getFormMeta($formId, 'ff_wpml', []);
+            $metaSettings = Helper::getFormMeta($formId, 'ff_wpml', []);
 
             foreach ($extractedFields as $key => $data) {
                 $translatableStrings['strings'][] = [
@@ -85,8 +82,8 @@ class FFWpmlSettingsController
                 ];
             }
 
-            if ($wpmlSettings) {
-                $translatableStrings = wp_parse_args($wpmlSettings, $translatableStrings);
+            if ($metaSettings) {
+                $translatableStrings = wp_parse_args($metaSettings, $translatableStrings);
             }
 
             // Update existing strings and add new ones
@@ -114,12 +111,107 @@ class FFWpmlSettingsController
                 return isset($extractedFields[$string['name']]);
             });
 
-            $settings['ff_wpml'] = $translatableStrings;
+            $wpmlSettings = $translatableStrings;
         } catch (\Exception $ex) {
             wp_send_json_error('Cannot get WPML translations for Fluent Forms: ' . $ex->getMessage(), 422);
         }
 
-        return $settings;
+        return wp_send_json($wpmlSettings, 200);
+    }
+    
+    public function storeWpmlSettings()
+    {
+        $request = $this->app->request->get();
+        $formId = ArrayHelper::get($request, 'form_id');
+        $ffWpml = ArrayHelper::get($request, 'ff_wpml', []);
+        $wpmlSettings = is_string($ffWpml) ? json_decode($ffWpml, true) : $ffWpml;
+        $isEnabled = ArrayHelper::get($wpmlSettings, 'enabled') === 'yes';
+
+        if ($isEnabled) {
+            $strings = ArrayHelper::get($wpmlSettings, 'strings', []);
+            if ($strings) {
+                $this->updateOrInsertStrings($strings);
+                $this->updateTranslations($strings);
+            }
+            Helper::setFormMeta($formId, 'ff_wpml', $wpmlSettings);
+
+            wp_send_json_success(__('Translations saved successfully.', 'fluentformwpml'), 200);
+        }
+
+        wp_send_json_error(__('An error occurred.', 'fluentformwpml'), 413);
+    }
+
+    public function removeWpmlSettings()
+    {
+        $request = $this->app->request->get();
+        $formId = ArrayHelper::get($request, 'form_id');
+        
+        global $wpdb;
+
+        // Get all strings related to this form
+        $strings = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, name FROM {$wpdb->prefix}icl_strings 
+            WHERE context = 'fluentform' AND name LIKE %s",
+            $formId . '_**_%'
+        ), ARRAY_A);
+
+        if (empty($strings)) {
+            return;
+        }
+
+        $stringIds = wp_list_pluck($strings, 'id');
+
+        // Delete translations
+        if (!empty($stringIds)) {
+            $wpdb->query(
+                "DELETE FROM {$wpdb->prefix}icl_string_translations 
+                WHERE string_id IN (" . implode(',', $stringIds) . ")"
+            );
+        }
+
+        // Delete strings
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM {$wpdb->prefix}icl_strings 
+            WHERE context = 'fluentform' AND name LIKE %s",
+            $formId . '_**_%'
+        ));
+
+        Helper::deleteFormMeta($formId, 'ff_wpml');
+        
+        wp_send_json_success(__('Translations removed successfully.', 'fluentformwpml'));
+    }
+    
+    public function pushSettings($settingsMenus, $formId)
+    {
+        if ($this->isWpmlAndStringTranslationActive()) {
+            $settingsMenus['ff_wpml'] = [
+                'title' => __('WPML Translations', 'fluentform'),
+                'slug'  => 'ff_wpml',
+                'hash'  => 'ff_wpml',
+                'route' => '/ff-wpml',
+            ];
+        }
+        
+        return $settingsMenus;
+    }
+
+    public function isWpmlAndStringTranslationActive() {
+        $wpmlActive = function_exists('icl_object_id');
+        $wpmlStringActive = defined('WPML_ST_VERSION');
+
+        return $wpmlActive && $wpmlStringActive;
+    }
+
+    public static function setRecaptchaLanguage($language)
+    {
+        $currentLanguage = FFWpmlHelper::getCurrentLanguage();
+        $allowed = Helper::locales('captcha');
+
+        if (isset($allowed[$currentLanguage])) {
+            $language = $currentLanguage;
+        }
+
+        return $language;
     }
 
     // Helper function to find existing string index
@@ -374,22 +466,6 @@ class FFWpmlSettingsController
         $this->updateTranslations($newStrings);
     }
 
-    public function saveFormSettings($formId, $settings)
-    {
-        $ffWpml = ArrayHelper::get($settings, 'ff_wpml', []);
-        $wpmlSettings = is_string($ffWpml) ? json_decode($ffWpml, true) : $ffWpml;
-        $isEnabled = ArrayHelper::get($wpmlSettings, 'enabled') === 'yes';
-
-        if ($isEnabled) {
-            $strings = ArrayHelper::get($wpmlSettings, 'strings', []);
-            if ($strings) {
-                $this->updateOrInsertStrings($strings);
-                $this->updateTranslations($strings);
-            }
-            Helper::setFormMeta($formId, 'ff_wpml', $wpmlSettings);
-        }
-    }
-
     private function updateOrInsertStrings(&$strings)
     {
         global $wpdb;
@@ -614,7 +690,7 @@ class FFWpmlSettingsController
         }
     }
 
-    public function clearWpmlSettings($formId)
+    public function removeAssociatedWpmlField($formId)
     {
         global $wpdb;
 

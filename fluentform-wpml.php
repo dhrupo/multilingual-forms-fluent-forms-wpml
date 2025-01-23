@@ -57,7 +57,7 @@ class FluentFormWpml
     protected function registerHooks($fluentForm)
     {
         if ($this->isWpmlActive()) {
-            new FluentFormWpml\Controllers\FFWpmlSettingsController();
+            new FluentFormWpml\Controllers\FFWpmlSettingsController($fluentForm);
         }
     }
 
