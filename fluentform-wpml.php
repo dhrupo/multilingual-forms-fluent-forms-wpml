@@ -50,7 +50,6 @@ class FluentFormWpml
 
     protected function includeFiles()
     {
-        include_once FFWPML_DIR . 'src/Integrations/Bootstrap.php';
         include_once FFWPML_DIR . 'src/Controllers/FFWpmlSettingsController.php';
         include_once FFWPML_DIR . 'src/Helpers/FFWpmlHelper.php';
     }
@@ -58,7 +57,7 @@ class FluentFormWpml
     protected function registerHooks($fluentForm)
     {
         if ($this->isWpmlActive()) {
-            new FluentFormWpml\Integrations\Bootstrap($fluentForm);
+            new FluentFormWpml\Controllers\FFWpmlSettingsController();
         }
     }
 

@@ -497,8 +497,10 @@ class FFWpmlSettingsController
                 $stringName,
                 $currentLanguage
             ));
-
-            $this->updateFormString($form, $stringName, $translatedValue);
+            
+            if ($translatedValue) {
+                $this->updateFormString($form, $stringName, $translatedValue);
+            }
         }
 
         return $form;
