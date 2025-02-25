@@ -6,8 +6,6 @@ use FluentForm\App\Helpers\Helper;
 use FluentForm\App\Models\Form;
 use FluentForm\App\Modules\Form\FormFieldsParser;
 use FluentForm\Framework\Helpers\ArrayHelper;
-use FluentFormWpml\Helpers\FFWpmlHelper;
-use WPML_Language_Of_Domain;
 
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
@@ -16,7 +14,7 @@ if (!defined('ABSPATH')) {
 class FFWpmlSettingsController
 {
     protected $app;
-    
+
     public function __construct($app)
     {
         $this->app = $app;
@@ -25,8 +23,6 @@ class FFWpmlSettingsController
 
     public function init()
     {
-        add_action('plugins_loaded', [$this, 'loadLanguage'], 11);
-        add_filter('wpml_get_translatable_types', [$this, 'getTranslatableTypes'], 10, 1);
         add_filter('fluentform/ajax_url', [$this, 'setAjaxLanguage'], 10, 1);
         add_filter('fluentform/rendering_form', [$this, 'setWpmlForm'], 10, 1);
         add_filter('fluentform/recaptcha_lang', [$this, 'setRecaptchaLanguage'], 10, 1);
@@ -40,147 +36,68 @@ class FFWpmlSettingsController
         $this->app->addAdminAjaxAction('fluentform_store_wpml_settings', [$this, 'storeWpmlSettings']);
         $this->app->addAdminAjaxAction('fluentform_delete_wpml_settings', [$this, 'removeWpmlSettings']);
 
-        add_action('fluentform/form_settings_menu',  [$this, 'pushSettings'], 10, 2);
+        add_action('fluentform/form_settings_menu', [$this, 'pushSettings'], 10, 2);
         add_filter('fluentform/form_fields_update', [$this, 'handleFormFieldUpdate'], 10, 2);
-        add_action('fluentform/after_form_delete', [$this, 'removeAssociatedWpmlField'], 10, 1);
+        add_action('fluentform/after_form_delete', [$this, 'removeWpmlStrings'], 10, 1);
     }
-    
+
     public function getWpmlSettings()
     {
         $request = $this->app->request->get();
         $formId = ArrayHelper::get($request, 'form_id');
-        $wpmlSettings = [];
-        try {
-            global $sitepress;
-            $form = Form::find($formId);
-            $formFields = FormFieldsParser::getFields($form);
-
-            $extractedFields = [];
-            foreach ($formFields as $field) {
-                $this->extractFieldStrings($extractedFields, $field, $formId);
-            }
-
-            $languages = $sitepress->get_active_languages();
-            $defaultLanguage = self::getStringLanguage();
-
-            $translatableStrings = [
-                'strings'             => [],
-                'available_languages' => $languages,
-                'default_language'    => $defaultLanguage,
-                'enabled'             => 'no'
-            ];
-
-            $metaSettings = Helper::getFormMeta($formId, 'ff_wpml', []);
-
-            foreach ($extractedFields as $key => $data) {
-                $translatableStrings['strings'][] = [
-                    'name'         => $key,
-                    'value'        => $data['value'],
-                    'identifier'   => $data['identifier'],
-                    'translations' => [],
-                    'status'       => []
-                ];
-            }
-
-            if ($metaSettings) {
-                $translatableStrings = wp_parse_args($metaSettings, $translatableStrings);
-            }
-
-            // Update existing strings and add new ones
-            foreach ($extractedFields as $key => $data) {
-                $existingIndex = $this->findExistingStringIndex($translatableStrings['strings'], $key);
-
-                if ($existingIndex !== false) {
-                    // Update existing string
-                    $translatableStrings['strings'][$existingIndex]['value'] = $data['value'];
-                    $translatableStrings['strings'][$existingIndex]['identifier'] = $data['identifier'];
-                } else {
-                    // Add new string
-                    $translatableStrings['strings'][] = [
-                        'name'         => $key,
-                        'value'        => $data['value'],
-                        'identifier'   => $data['identifier'],
-                        'translations' => [],
-                        'status'       => []
-                    ];
-                }
-            }
-
-            // Remove strings that no longer exist in extractedFields
-            $translatableStrings['strings'] = array_filter($translatableStrings['strings'], function($string) use ($extractedFields) {
-                return isset($extractedFields[$string['name']]);
-            });
-
-            $wpmlSettings = $translatableStrings;
-        } catch (\Exception $ex) {
-            wp_send_json_error('Cannot get WPML translations for Fluent Forms: ' . $ex->getMessage(), 422);
-        }
-
-        return wp_send_json($wpmlSettings, 200);
+        $isFFWpmlEnabled = $this->isWpmlEnabledOnForm($formId);
+        wp_send_json_success($isFFWpmlEnabled);
     }
-    
+
     public function storeWpmlSettings()
     {
         $request = $this->app->request->get();
+        $isFFWpmlEnabled = ArrayHelper::get($request, 'is_ff_wpml_enabled', false) == 'true';
         $formId = ArrayHelper::get($request, 'form_id');
-        $ffWpml = ArrayHelper::get($request, 'ff_wpml', []);
-        $wpmlSettings = is_string($ffWpml) ? json_decode($ffWpml, true) : $ffWpml;
-        $isEnabled = ArrayHelper::get($wpmlSettings, 'enabled') === 'yes';
 
-        if ($isEnabled) {
-            $strings = ArrayHelper::get($wpmlSettings, 'strings', []);
-            if ($strings) {
-                $this->updateOrInsertStrings($strings);
-                $this->updateTranslations($strings);
-            }
-            Helper::setFormMeta($formId, 'ff_wpml', $wpmlSettings);
-
-            wp_send_json_success(__('Translations saved successfully.', 'fluentformwpml'), 200);
+        if (!$isFFWpmlEnabled) {
+            Helper::setFormMeta($formId, 'ff_wpml', false);
+            wp_send_json_success(__('Translation is disabled for this form', 'fluentformwpml'));
         }
 
-        wp_send_json_error(__('An error occurred.', 'fluentformwpml'), 413);
+        $form = Form::find($formId);
+        $formFields = FormFieldsParser::getFields($form);
+        $package = $this->getFormPackage($form);
+        
+        $this->extractAndRegisterStrings($formFields, $formId, $package);
+
+        Helper::setFormMeta($formId, 'ff_wpml', $isFFWpmlEnabled);
+        wp_send_json_success(__('Translation is enabled for this form', 'fluentformwpml'));
     }
 
-    public function removeWpmlSettings()
+    public function handleFormFieldUpdate($formFields, $formId)
+    {
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $formFields;
+        }
+        
+        $form = Form::find($formId);
+        $package = $this->getFormPackage($form);
+        $decodedFields = json_decode($formFields);
+        $fields = isset($decodedFields->fields) ? $decodedFields->fields : [];
+
+        do_action('wpml_start_string_package_registration', $package);
+
+        $this->extractAndRegisterStrings($fields, $formId, $package);
+
+        do_action('wpml_delete_unused_package_strings', $package);
+
+        return $formFields;
+    }
+
+    public function removeWpmlSettings($formId)
     {
         $request = $this->app->request->get();
         $formId = ArrayHelper::get($request, 'form_id');
-        
-        global $wpdb;
-
-        // Get all strings related to this form
-        $strings = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, name FROM {$wpdb->prefix}icl_strings 
-            WHERE context = 'fluentform' AND name LIKE %s",
-            $formId . '_**_%'
-        ), ARRAY_A);
-
-        if (empty($strings)) {
-            return;
-        }
-
-        $stringIds = wp_list_pluck($strings, 'id');
-
-        // Delete translations
-        if (!empty($stringIds)) {
-            $wpdb->query(
-                "DELETE FROM {$wpdb->prefix}icl_string_translations 
-                WHERE string_id IN (" . implode(',', $stringIds) . ")"
-            );
-        }
-
-        // Delete strings
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}icl_strings 
-            WHERE context = 'fluentform' AND name LIKE %s",
-            $formId . '_**_%'
-        ));
-
-        Helper::deleteFormMeta($formId, 'ff_wpml');
-        
+        $this->removeWpmlStrings($formId);
         wp_send_json_success(__('Translations removed successfully.', 'fluentformwpml'));
     }
-    
+
     public function pushSettings($settingsMenus, $formId)
     {
         if ($this->isWpmlAndStringTranslationActive()) {
@@ -191,11 +108,12 @@ class FFWpmlSettingsController
                 'route' => '/ff-wpml',
             ];
         }
-        
+
         return $settingsMenus;
     }
 
-    public function isWpmlAndStringTranslationActive() {
+    public function isWpmlAndStringTranslationActive()
+    {
         $wpmlActive = function_exists('icl_object_id');
         $wpmlStringActive = defined('WPML_ST_VERSION');
 
@@ -204,7 +122,7 @@ class FFWpmlSettingsController
 
     public static function setRecaptchaLanguage($language)
     {
-        $currentLanguage = FFWpmlHelper::getCurrentLanguage();
+        $currentLanguage = apply_filters('wpml_current_language', null);
         $allowed = Helper::locales('captcha');
 
         if (isset($allowed[$currentLanguage])) {
@@ -214,17 +132,6 @@ class FFWpmlSettingsController
         return $language;
     }
 
-    // Helper function to find existing string index
-    private function findExistingStringIndex($strings, $name)
-    {
-        foreach ($strings as $index => $string) {
-            if ($string['name'] === $name) {
-                return $index;
-            }
-        }
-        return false;
-    }
-
     // Extract all translatable strings form fields
     private function extractFieldStrings(&$fields, $field, $formId)
     {
@@ -232,46 +139,26 @@ class FFWpmlSettingsController
 
         // Register label
         if (!empty($field->settings->label)) {
-            $key = "{$formId}_**_{$fieldName}_**_label";
-            $fields[$key] = [
-                'identifier' => "{$fieldName}->Label",
-                'value'      => $field->settings->label
-            ];
+            $fields["{$fieldName}->Label"] = $field->settings->label;
         }
 
         // Register placeholder
         if (!empty($field->attributes->placeholder)) {
-            $key = "{$formId}_**_{$fieldName}_**_placeholder";
-            $fields[$key] = [
-                'identifier' => "{$fieldName}->Placeholder",
-                'value'      => $field->attributes->placeholder
-            ];
+            $fields["{$fieldName}->placeholder"] = $field->attributes->placeholder;
         }
 
         // Register help message
         if (!empty($field->settings->help_message)) {
-            $key = "{$formId}_**_{$fieldName}_**_help_message";
-            $fields[$key] = [
-                'identifier' => "{$fieldName}->Help Message",
-                'value'      => $field->settings->help_message
-            ];
+            $fields["{$fieldName}->help_message"] = $field->settings->help_message;
         }
 
         // Register validation messages
         if (!empty($field->settings->validation_rules)) {
             foreach ($field->settings->validation_rules as $rule => $details) {
                 if ($details->value && !empty($details->message)) {
-                    $key = "{$formId}_**_{$fieldName}_**_{$rule}";
-                    $fields[$key] = [
-                        'identifier' => "{$fieldName}->Validation Rules->{$rule}",
-                        'value'      => $details->message
-                    ];
+                    $fields["{$fieldName}->Validation Rules->{$rule}"] = $details->message;
                 } elseif ($details->global && !empty($details->global_message)) {
-                    $key = "{$formId}_**_{$fieldName}_**_{$rule}";
-                    $fields[$key] = [
-                        'identifier' => "{$fieldName}->Validation Rules->{$rule}",
-                        'value'      => $details->message
-                    ];
+                    $fields["{$fieldName}->Validation Rules->{$rule}"] = $details->message;
                 }
             }
         }
@@ -280,22 +167,14 @@ class FFWpmlSettingsController
         if (!empty($field->settings->advanced_options)) {
             foreach ($field->settings->advanced_options as $option) {
                 if (!empty($option->label)) {
-                    $key = "{$formId}_**_{$fieldName}_**_{$option->value}";
-                    $fields[$key] = [
-                        'identifier' => "{$field->attributes->name}->Options->{$option->value}",
-                        'value'      => $option->label
-                    ];
+                    $fields["{$fieldName}->{$field->attributes->name}->Options->{$option->value}"] = $option->label;
                 }
             }
         }
 
         // Register inventory stockout message
         if (!empty($field->settings->inventory_stockout_message)) {
-            $key = "{$formId}_**_{$fieldName}_**_stock_out_message";
-            $fields[$key] = [
-                'identifier' => "{$field->attributes->name}->Inventory Stock Out",
-                'value'      => $field->settings->inventory_stockout_message
-            ];
+            $fields["{$fieldName}->stock_out_message"] = $field->settings->inventory_stockout_message;
         }
 
         // Handle complex fields (like name, address)
@@ -306,237 +185,16 @@ class FFWpmlSettingsController
         }
     }
 
-    public function handleFormFieldUpdate($formFields, $formId)
+    private function extractAndRegisterStrings($fields, $formId, $package)
     {
-        $wpmlSettings = Helper::getFormMeta($formId, 'ff_wpml', []);
-
-        if ($wpmlSettings) {
-            $decodedFields = json_decode($formFields, true);
-            $result = $this->updateWpmlSettingsString($wpmlSettings, $decodedFields);
-
-            // Handle removed strings
-            if (!empty($result['removed'])) {
-                $this->removeStringsFromWPML($result['removed']);
-            }
-
-            // Handle updated strings
-            if (!empty($result['updated'])) {
-                $this->updateStringsInWPML($result['updated'], $decodedFields);
-            }
-
-            // Handle new strings
-            $newStrings = $this->extractNewStrings($wpmlSettings, $decodedFields, $formId);
-            if (!empty($newStrings)) {
-                $wpmlSettings['strings'] = array_merge($wpmlSettings['strings'], $newStrings);
-                $this->registerNewStringsInWPML($newStrings);
-            }
-
-            Helper::setFormMeta($formId, 'ff_wpml', $wpmlSettings);
-        }
-
-        return $formFields;
-    }
-
-    private function removeStringsFromWPML($stringNames)
-    {
-        global $wpdb;
-
-        foreach ($stringNames as $stringName) {
-            // First, get the string ID from icl_strings
-            $stringId = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM {$wpdb->prefix}icl_strings WHERE name = %s",
-                $stringName
-            ));
-
-            if ($stringId) {
-                // Delete from icl_string_translations
-                $wpdb->delete(
-                    $wpdb->prefix . 'icl_string_translations',
-                    ['string_id' => $stringId],
-                    ['%d']
-                );
-
-                // Delete from icl_strings
-                $wpdb->delete(
-                    $wpdb->prefix . 'icl_strings',
-                    ['id' => $stringId],
-                    ['%d']
-                );
-            }
-        }
-    }
-
-    private function updateWpmlSettingsString(&$wpmlSettings, $formFields)
-    {
-        $removedStrings = [];
-        $updatedStrings = [];
-
-        foreach ($wpmlSettings['strings'] as $key => $string) {
-            $name = ArrayHelper::get($string, 'name');
-            $parts = explode('_**_', $name);
-            if (count($parts) === 3) {
-                $fieldName = $parts[1] ?? '';
-                $attribute = $parts[2] ?? '';
-
-                if ($fieldName) {
-                    $field = $this->findFieldByName($formFields['fields'], $fieldName);
-
-                    if ($field) {
-                        $newValue = $this->getFieldValue($field, $attribute);
-
-                        if ($newValue !== null && $newValue !== $string['value']) {
-                            $wpmlSettings['strings'][$key]['value'] = $newValue;
-                            $updatedStrings[$name] = $newValue;
-                        }
-                    } else {
-                        // Field no longer exists in the form
-                        $removedStrings[] = $name;
-                        unset($wpmlSettings['strings'][$key]);
-                    }
-                }
-            }
-        }
-
-        // Re-index the array after removing elements
-        $wpmlSettings['strings'] = array_values($wpmlSettings['strings']);
-
-        return [
-            'removed' => $removedStrings,
-            'updated' => $updatedStrings
-        ];
-    }
-
-    private function findFieldByName($fields, $name)
-    {
+        $extractedFields = [];
         foreach ($fields as $field) {
-            if (ArrayHelper::get($field, 'attributes.name') == $name) {
-                return $field;
-            }
-        }
-        return null;
-    }
-
-    private function getFieldValue($field, $attribute)
-    {
-        if (isset($field['attributes'][$attribute])) {
-            return $field['attributes'][$attribute];
-        } elseif (isset($field['settings'][$attribute])) {
-            return $field['settings'][$attribute];
-        } elseif (isset($field['settings']['validation_rules'][$attribute]['message'])) {
-            return $field['settings']['validation_rules'][$attribute]['message'];
-        }
-        return null;
-    }
-
-    private function extractNewStrings($wpmlSettings, $formFields, $formId)
-    {
-        $newStrings = [];
-        $existingNames = array_column($wpmlSettings['strings'], 'name');
-
-        foreach ($formFields['fields'] as $field) {
-            $fieldName = ArrayHelper::get($field, 'attributes.name');
-            if ($fieldName) {
-                $this->extractFieldStrings($newStrings, $field, $formId);
-            }
+            $this->extractFieldStrings($extractedFields, $field, $formId);
         }
 
-        return array_filter($newStrings, function($key) use ($existingNames) {
-            return !in_array($key, $existingNames);
-        }, ARRAY_FILTER_USE_KEY);
-    }
-
-    private function updateStringsInWPML($updatedStrings, $formFields)
-    {
-        global $wpdb;
-
-        foreach ($updatedStrings as $name => $value) {
-            $wpdb->update(
-                $wpdb->prefix . 'icl_strings',
-                ['value' => $value],
-                ['name' => $name],
-                ['%s'],
-                ['%s']
-            );
+        foreach ($extractedFields as $key => $value) {
+            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
         }
-    }
-
-    private function registerNewStringsInWPML($newStrings)
-    {
-        $this->updateOrInsertStrings($newStrings);
-        $this->updateTranslations($newStrings);
-    }
-
-    private function updateOrInsertStrings(&$strings)
-    {
-        global $wpdb;
-
-        foreach ($strings as &$string) {
-            $existingString = $wpdb->get_row($wpdb->prepare(
-                "SELECT id, value FROM {$wpdb->prefix}icl_strings 
-                WHERE context = 'fluentform' AND name = %s",
-                $string['name']
-            ));
-
-            if ($existingString) {
-                if ($existingString->value !== $string['value']) {
-                    // Update existing string
-                    $wpdb->update(
-                        $wpdb->prefix . 'icl_strings',
-                        [
-                            'value' => $string['value'],
-                        ],
-                        [
-                            'id' => $existingString->id
-                        ]
-                    );
-                }
-                $string['id'] = $existingString->id;
-            } else {
-                // Insert new string
-                $wpdb->insert(
-                    $wpdb->prefix . 'icl_strings',
-                    [
-                        'language'                => FFWpmlHelper::getDefaultLanguage(),
-                        'context'                 => 'fluentform',
-                        'name'                    => $string['name'],
-                        'value'                   => $string['value'],
-                        'domain_name_context_md5' => md5($string['name'] . 'fluentform'),
-                        'status'                  => ICL_STRING_TRANSLATION_COMPLETE,
-                    ]
-                );
-                $string['id'] = $wpdb->insert_id;
-            }
-        }
-    }
-
-    public static function loadLanguage()
-    {
-        $pluginFolder = basename(dirname(__FILE__, 2));
-        load_plugin_textdomain('fluentformwpml', false, $pluginFolder . '/languages/');
-    }
-
-    public static function getTranslatableTypes($types)
-    {
-        $slug = 'fluentform';
-        $name = 'Fluentform';
-
-        if (isset($types[$slug])) {
-            return $types;
-        }
-
-        $type = new \stdClass();
-        $type->name = $slug;
-        $type->label = $name;
-        $type->prefix = 'package';
-        $type->external_type = 1;
-
-        $type->labels = new \stdClass();
-        $type->labels->singular_name = $name;
-        $type->labels->name = $name;
-
-        $types[$slug] = $type;
-
-        return $types;
     }
 
     public function setAjaxLanguage($url)
@@ -550,176 +208,133 @@ class FFWpmlSettingsController
 
     public function setWpmlForm($form)
     {
-        global $wpdb;
-        $formId = $form->id;
-        $formStrings = ArrayHelper::get(FFWpmlHelper::getStringsForForm($formId), 'strings');
-
-        if (!$formStrings) {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
             return $form;
         }
 
-        $currentLanguage = FFWpmlHelper::getCurrentLanguage();
+        $formFields = FormFieldsParser::getFields($form);
 
-        foreach ($formStrings as $string) {
-            $stringName = $string['name'];
-
-            $translatedValue = $wpdb->get_var($wpdb->prepare(
-                "SELECT t.value
-                FROM {$wpdb->prefix}icl_string_translations t
-                JOIN {$wpdb->prefix}icl_strings s ON s.id = t.string_id
-                WHERE s.context = 'fluentform'
-                AND s.name = %s
-                AND t.language = %s",
-                $stringName,
-                $currentLanguage
-            ));
-            
-            if ($translatedValue) {
-                $this->updateFormString($form, $stringName, $translatedValue);
-            }
+        $extractedFields = [];
+        foreach ($formFields as $field) {
+            $this->extractFieldStrings($extractedFields, $field, $form->id);
         }
+
+        foreach ($extractedFields as $key => $value) {
+            $package = $this->getFormPackage($form);
+            $extractedFields[$key] = apply_filters('wpml_translate_string', $value, $key, $package);
+        }
+
+        $updatedFields = $this->updateFormFieldsWithTranslations($form->fields['fields'], $extractedFields);
+
+        $form->fields['fields'] = $updatedFields;
 
         return $form;
     }
 
-    public function updateFormString(&$form, $stringName, $value)
+    private function getFormPackage($form)
     {
-        $parts = explode('_**_', $stringName);
-        $fieldName = $parts[1]; // Assuming format is always "{formId}_**_{fieldName}_**_{type}"
-        $type = end($parts);
-
-        foreach ($form->fields as &$fieldGroup) {
-            foreach ($fieldGroup as &$field) {
-                if (isset($field['attributes']['name']) && $field['attributes']['name'] == $fieldName) {
-                    $this->updateFieldValue($field, $type, $value);
-                    return;
-                } elseif (($field['element'] == 'input_name' || $field['element'] == 'address') && isset($field['fields'])) {
-                    foreach ($field['fields'] as &$subField) {
-                        if (isset($subField['attributes']['name']) && $subField['attributes']['name'] == $fieldName) {
-                            $this->updateFieldValue($subField, $type, $value);
-                            return;
-                        }
-                    }
-                }
-            }
-        }
+        return [
+            'kind'  => 'Fluent Forms',
+            'name'  => $form->id,
+            'title' => $form->title,
+        ];
     }
 
-    private function updateFieldValue(&$field, $type, $value)
+    private function updateFormFieldsWithTranslations($fields, $translations)
     {
-        switch ($type) {
-            case 'placeholder':
-                if (isset($field['attributes']['placeholder'])) {
-                    $field['attributes']['placeholder'] = $value;
+        foreach ($fields as &$field) {
+            $fieldName = isset($field['attributes']['name']) ? $field['attributes']['name'] : null;
+
+            if ($fieldName) {
+                // Update label
+                $labelKey = "{$fieldName}->Label";
+                if (isset($translations[$labelKey])) {
+                    $field['settings']['label'] = $translations[$labelKey];
                 }
-                break;
-            case 'label':
-                if (isset($field['settings']['label'])) {
-                    $field['settings']['label'] = $value;
+
+                // Update placeholder
+                $placeholderKey = "{$fieldName}->placeholder";
+                if (isset($translations[$placeholderKey]) && isset($field['attributes']['placeholder'])) {
+                    $field['attributes']['placeholder'] = $translations[$placeholderKey];
                 }
-                break;
-            case 'stock_out_message':
-                if (isset($field['settings']['inventory_stockout_message'])) {
-                    $field['settings']['inventory_stockout_message'] = $value;
+
+                // Update help message
+                $helpMessageKey = "{$fieldName}->help_message";
+                if (isset($translations[$helpMessageKey])) {
+                    $field['settings']['help_message'] = $translations[$helpMessageKey];
                 }
-                break;
-            case 'help_message':
-                if (isset($field['settings']['help_message'])) {
-                    $field['settings']['help_message'] = $value;
-                }
-                break;
-            default:
-                // Handle validation messages
+
+                // Update validation messages
                 if (isset($field['settings']['validation_rules'])) {
                     foreach ($field['settings']['validation_rules'] as $ruleName => &$rule) {
-                        if ($ruleName == $type && isset($rule['message'])) {
-                            $rule['message'] = $value;
+                        $validationKey = "{$fieldName}->Validation Rules->{$ruleName}";
+                        if (isset($translations[$validationKey])) {
+                            $rule['message'] = $translations[$validationKey];
                         }
                     }
                 }
-                // Handle advanced options
+
+                // Update options for radio, checkbox, etc.
                 if (isset($field['settings']['advanced_options'])) {
                     foreach ($field['settings']['advanced_options'] as &$option) {
-                        if (isset($option['value']) && $option['value'] == $type && isset($option['label'])) {
-                            $option['label'] = $value;
+                        $optionKey = "{$fieldName}->{$field['attributes']['name']}->Options->{$option['value']}";
+                        if (isset($translations[$optionKey])) {
+                            $option['label'] = $translations[$optionKey];
                         }
                     }
                 }
-                break;
-        }
-    }
 
-    public static function getStringLanguage()
-    {
-        global $sitepress;
-
-        if (class_exists('WPML_Language_Of_Domain')) {
-            $languageOfDomain = new WPML_Language_Of_Domain($sitepress);
-            $defaultLanguage = $languageOfDomain->get_language('fluentform');
-            if (!$defaultLanguage) {
-                $defaultLanguage = FFWpmlHelper::getDefaultLanguage();
+                // Update inventory stockout message
+                $stockOutKey = "{$fieldName}->stock_out_message";
+                if (isset($translations[$stockOutKey])) {
+                    $field['settings']['inventory_stockout_message'] = $translations[$stockOutKey];
+                }
             }
-        } else {
-            global $sitepress_settings;
-            $defaultLanguage = !empty($sitepress_settings['st']['strings_language']) ? $sitepress_settings['st']['strings_language'] : FFWpmlHelper::getDefaultLanguage();
+
+            // Handle nested fields (like for input_name)
+            if (isset($field['fields']) && is_array($field['fields'])) {
+                foreach ($field['fields'] as $subFieldName => &$subField) {
+                    $this->updateSubField($subField, $subFieldName, $translations);
+                }
+            }
         }
 
-        return $defaultLanguage;
+        return $fields;
     }
 
-    public static function updateTranslations($strings)
+    private function updateSubField(&$subField, $subFieldName, $translations)
     {
-        foreach ($strings as $string) {
-            if ($stringId = ArrayHelper::get($string, 'id')) {
-                $stringName = $string['name'];
-                $translations = ArrayHelper::get($string, 'translations', []);
+        // Update label
+        $labelKey = "{$subFieldName}->Label";
+        if (isset($translations[$labelKey])) {
+            $subField['settings']['label'] = $translations[$labelKey];
+        }
 
-                if ($translations) {
-                    foreach ($translations as $languageKey => $translation) {
-                        if (!empty($translation)) {
-                            try {
-                                FFWpmlHelper::updateStringTranslation($stringId, $stringName, $languageKey,
-                                    $translation);
-                            } catch (\Exception $e) {
-                                error_log("Error updating translation for string $stringName: " . $e->getMessage());
-                            }
-                        }
-                    }
+        // Update placeholder
+        $placeholderKey = "{$subFieldName}->placeholder";
+        if (isset($translations[$placeholderKey]) && isset($subField['attributes']['placeholder'])) {
+            $subField['attributes']['placeholder'] = $translations[$placeholderKey];
+        }
+
+        // Update validation messages
+        if (isset($subField['settings']['validation_rules'])) {
+            foreach ($subField['settings']['validation_rules'] as $ruleName => &$rule) {
+                $validationKey = "{$subFieldName}->Validation Rules->{$ruleName}";
+                if (isset($translations[$validationKey])) {
+                    $rule['message'] = $translations[$validationKey];
                 }
             }
         }
     }
 
-    public function removeAssociatedWpmlField($formId)
+    private function isWpmlEnabledOnForm($formId)
     {
-        global $wpdb;
-
-        // Get all strings related to this form
-        $strings = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, name FROM {$wpdb->prefix}icl_strings 
-            WHERE context = 'fluentform' AND name LIKE %s",
-            $formId . '_**_%'
-        ), ARRAY_A);
-
-        if (empty($strings)) {
-            return;
-        }
-
-        $stringIds = wp_list_pluck($strings, 'id');
-
-        // Delete translations
-        if (!empty($stringIds)) {
-            $wpdb->query(
-                "DELETE FROM {$wpdb->prefix}icl_string_translations 
-                WHERE string_id IN (" . implode(',', $stringIds) . ")"
-            );
-        }
-
-        // Delete strings
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}icl_strings 
-            WHERE context = 'fluentform' AND name LIKE %s",
-            $formId . '_**_%'
-        ));
+        return Helper::getFormMeta($formId, 'ff_wpml', false) == true;
+    }
+    
+    private function removeWpmlStrings($formId)
+    {
+        do_action('wpml_delete_package', $formId, 'Fluent Forms');
+        Helper::setFormMeta($formId, 'ff_wpml', false);
     }
 }

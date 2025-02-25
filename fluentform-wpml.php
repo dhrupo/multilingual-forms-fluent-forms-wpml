@@ -33,7 +33,7 @@ define('FFWPML_URL', plugins_url('', __FILE__));
 
 class FluentFormWpml
 {
-    private static $active_plugins;
+    private static $activePlugins;
 
     public function boot()
     {
@@ -51,7 +51,6 @@ class FluentFormWpml
     protected function includeFiles()
     {
         include_once FFWPML_DIR . 'src/Controllers/FFWpmlSettingsController.php';
-        include_once FFWPML_DIR . 'src/Helpers/FFWpmlHelper.php';
     }
 
     protected function registerHooks($fluentForm)
@@ -63,39 +62,39 @@ class FluentFormWpml
 
     public static function isWpmlActive()
     {
-        if (!isset(self::$active_plugins)) {
+        if (!isset(self::$activePlugins)) {
             self::setActivePlugins();
         }
 
         return (
             in_array(
                 'sitepress-multilingual-cms/sitepress.php',
-                self::$active_plugins,
+                self::$activePlugins,
                 true
             ) ||
             array_key_exists(
                 'sitepress-multilingual-cms/sitepress.php',
-                self::$active_plugins
+                self::$activePlugins
             )
         ) && (
             in_array(
                 'wpml-string-translation/plugin.php',
-                self::$active_plugins,
+                self::$activePlugins,
                 true
             ) ||
             array_key_exists(
                 'wpml-string-translation/plugin.php',
-                self::$active_plugins
+                self::$activePlugins
             )
         );
     }
 
     private static function setActivePlugins()
     {
-        self::$active_plugins = (array)get_option('active_plugins', array());
+        self::$activePlugins = (array)get_option('active_plugins', array());
 
         if (is_multisite()) {
-            self::$active_plugins = array_merge(self::$active_plugins,
+            self::$activePlugins = array_merge(self::$activePlugins,
                 get_site_option('active_sitewide_plugins', array()));
         }
     }
@@ -116,8 +115,8 @@ class FluentFormWpml
                 $install_url_text = 'Click Here to Activate the Plugin';
             }
 
-            $message = 'FluentForm WPML Add-On Requires Fluent Forms Add On Plugin, <b><a href="' . $pluginInfo->url
-                       . '">' . $install_url_text . '</a></b>';
+            $message = 'FluentForm WPML Add-On Requires Fluent Forms Add On Plugin, <b>
+                <a href="' . $pluginInfo->url . '">' . $install_url_text . '</a></b>';
 
             printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
         });
