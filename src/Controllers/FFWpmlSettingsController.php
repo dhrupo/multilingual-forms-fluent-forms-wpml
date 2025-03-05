@@ -4,6 +4,7 @@ namespace FluentFormWpml\Controllers;
 
 use FluentForm\App\Helpers\Helper;
 use FluentForm\App\Models\Form;
+use FluentForm\App\Models\FormMeta;
 use FluentForm\App\Modules\Form\FormFieldsParser;
 use FluentForm\Framework\Helpers\ArrayHelper;
 
@@ -39,6 +40,7 @@ class FFWpmlSettingsController
         add_action('fluentform/form_settings_menu', [$this, 'pushSettings'], 10, 2);
         add_filter('fluentform/form_fields_update', [$this, 'handleFormFieldUpdate'], 10, 2);
         add_action('fluentform/after_form_delete', [$this, 'removeWpmlStrings'], 10, 1);
+        add_filter('fluentform/form_submission_confirmation', [$this, 'translateConfirmationMessage'], 10, 3);
     }
 
     public function getWpmlSettings()
@@ -61,10 +63,55 @@ class FFWpmlSettingsController
         }
 
         $form = Form::find($formId);
+        $formSettings = FormMeta
+            ::where('form_id', $formId)
+            ->whereNot('meta_key', [
+                'step_data_persistency_status',
+                'form_save_state_status',
+                '_primary_email_field',
+                'ffs_default',
+                '_ff_form_styles',
+                'ff_wpml',
+                '_total_views',
+                'revision'
+            ])
+            ->get()
+            ->reduce(function ($result, $item) {
+                $value = $item['value'];
+                $decodedValue = json_decode($value, true);
+                $result[$item['meta_key']] = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
+                return $result;
+            }, []);
+        $form->settings = $formSettings;
+        
         $formFields = FormFieldsParser::getFields($form);
         $package = $this->getFormPackage($form);
-        
+
+        // Extract and register strings from regular form fields
         $this->extractAndRegisterStrings($formFields, $formId, $package);
+
+        // Extract and register strings from submit button
+        if (isset($form->fields['submitButton'])) {
+            $submitButton = json_decode(json_encode($form->fields['submitButton']));
+            $this->extractAndRegisterStrings($submitButton, $formId, $package);
+        }
+
+        // Extract and register strings from step start elements
+        if (isset($form->fields['stepsWrapper']['stepStart'])) {
+            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']));
+            $this->extractAndRegisterStrings($stepStart, $formId, $package);
+        }
+
+        // Extract and register strings from step end elements
+        if (isset($form->fields['stepsWrapper']['stepEnd'])) {
+            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']));
+            $this->extractAndRegisterStrings($stepEnd, $formId, $package);
+        }
+
+        // Extract and register form settings strings
+        if (isset($form->settings)) {
+            $this->extractAndRegisterFormSettingsStrings($form->settings, $formId, $package);
+        }
 
         Helper::setFormMeta($formId, 'ff_wpml', $isFFWpmlEnabled);
         wp_send_json_success(__('Translation is enabled for this form', 'fluentformwpml'));
@@ -75,16 +122,62 @@ class FFWpmlSettingsController
         if (!$this->isWpmlEnabledOnForm($formId)) {
             return $formFields;
         }
+
+        $form = Form::find($formId);$formSettings = FormMeta
+        ::where('form_id', $formId)
+        ->whereNot('meta_key', [
+            'step_data_persistency_status',
+            'form_save_state_status',
+            '_primary_email_field',
+            'ffs_default',
+            '_ff_form_styles',
+            'ff_wpml',
+            '_total_views',
+            'revision'
+        ])
+        ->get()
+        ->reduce(function ($result, $item) {
+            $value = $item['value'];
+            $decodedValue = json_decode($value, true);
+            $result[$item['meta_key']] = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
+            return $result;
+        }, []);
+        $form->settings = $formSettings;
         
-        $form = Form::find($formId);
         $package = $this->getFormPackage($form);
         $decodedFields = json_decode($formFields);
-        $fields = isset($decodedFields->fields) ? $decodedFields->fields : [];
 
+        // Start the registration process
         do_action('wpml_start_string_package_registration', $package);
 
+        // Extract and register regular form fields
+        $fields = isset($decodedFields->fields) ? $decodedFields->fields : [];
         $this->extractAndRegisterStrings($fields, $formId, $package);
 
+        // Extract and register submit button
+        if (isset($decodedFields->submitButton)) {
+            $submitButton = $decodedFields->submitButton;
+            $this->extractAndRegisterStrings($submitButton, $formId, $package);
+        }
+
+        // Extract and register step elements
+        if (isset($decodedFields->stepsWrapper)) {
+            if (isset($decodedFields->stepsWrapper->stepStart)) {
+                $stepStart = $decodedFields->stepsWrapper->stepStart;
+                $this->extractAndRegisterStrings($stepStart, $formId, $package);
+            }
+
+            if (isset($decodedFields->stepsWrapper->stepEnd)) {
+                $stepEnd = $decodedFields->stepsWrapper->stepEnd;
+                $this->extractAndRegisterStrings($stepEnd, $formId, $package);
+            }
+        }
+
+        if (isset($form->settings)) {
+            $this->extractAndRegisterFormSettingsStrings($form->settings, $formId, $package);
+        }
+
+        // Finish the registration process
         do_action('wpml_delete_unused_package_strings', $package);
 
         return $formFields;
@@ -93,7 +186,6 @@ class FFWpmlSettingsController
     public function removeWpmlSettings($formId)
     {
         $request = $this->app->request->get();
-        $formId = ArrayHelper::get($request, 'form_id');
         $this->removeWpmlStrings($formId);
         wp_send_json_success(__('Translations removed successfully.', 'fluentformwpml'));
     }
@@ -132,71 +224,6 @@ class FFWpmlSettingsController
         return $language;
     }
 
-    // Extract all translatable strings form fields
-    private function extractFieldStrings(&$fields, $field, $formId)
-    {
-        $fieldName = $field->attributes->name;
-
-        // Register label
-        if (!empty($field->settings->label)) {
-            $fields["{$fieldName}->Label"] = $field->settings->label;
-        }
-
-        // Register placeholder
-        if (!empty($field->attributes->placeholder)) {
-            $fields["{$fieldName}->placeholder"] = $field->attributes->placeholder;
-        }
-
-        // Register help message
-        if (!empty($field->settings->help_message)) {
-            $fields["{$fieldName}->help_message"] = $field->settings->help_message;
-        }
-
-        // Register validation messages
-        if (!empty($field->settings->validation_rules)) {
-            foreach ($field->settings->validation_rules as $rule => $details) {
-                if ($details->value && !empty($details->message)) {
-                    $fields["{$fieldName}->Validation Rules->{$rule}"] = $details->message;
-                } elseif ($details->global && !empty($details->global_message)) {
-                    $fields["{$fieldName}->Validation Rules->{$rule}"] = $details->message;
-                }
-            }
-        }
-
-        // Register advanced options (for radio, checkbox, etc.)
-        if (!empty($field->settings->advanced_options)) {
-            foreach ($field->settings->advanced_options as $option) {
-                if (!empty($option->label)) {
-                    $fields["{$fieldName}->{$field->attributes->name}->Options->{$option->value}"] = $option->label;
-                }
-            }
-        }
-
-        // Register inventory stockout message
-        if (!empty($field->settings->inventory_stockout_message)) {
-            $fields["{$fieldName}->stock_out_message"] = $field->settings->inventory_stockout_message;
-        }
-
-        // Handle complex fields (like name, address)
-        if (in_array($field->element, ['input_name', 'address']) && !empty($field->fields)) {
-            foreach ($field->fields as $subField) {
-                $this->extractFieldStrings($fields, $subField, $formId);
-            }
-        }
-    }
-
-    private function extractAndRegisterStrings($fields, $formId, $package)
-    {
-        $extractedFields = [];
-        foreach ($fields as $field) {
-            $this->extractFieldStrings($extractedFields, $field, $formId);
-        }
-
-        foreach ($extractedFields as $key => $value) {
-            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
-        }
-    }
-
     public function setAjaxLanguage($url)
     {
         global $sitepress;
@@ -219,16 +246,66 @@ class FFWpmlSettingsController
             $this->extractFieldStrings($extractedFields, $field, $form->id);
         }
 
+        // Extract strings from submit button
+        if (isset($form->fields['submitButton'])) {
+            $submitButton = json_decode(json_encode($form->fields['submitButton']));
+            $this->extractFieldStrings($extractedFields, $submitButton, $form->id);
+        }
+
+        // Extract strings from step wrapper elements
+        if (isset($form->fields['stepsWrapper']['stepStart'])) {
+            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']));
+            $this->extractFieldStrings($extractedFields, $stepStart, $form->id);
+        }
+
+        if (isset($form->fields['stepsWrapper']['stepEnd'])) {
+            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']));
+            $this->extractFieldStrings($extractedFields, $stepEnd, $form->id);
+        }
+
         foreach ($extractedFields as $key => $value) {
             $package = $this->getFormPackage($form);
             $extractedFields[$key] = apply_filters('wpml_translate_string', $value, $key, $package);
         }
 
         $updatedFields = $this->updateFormFieldsWithTranslations($form->fields['fields'], $extractedFields);
-
         $form->fields['fields'] = $updatedFields;
 
+        // Update submit button
+        if (isset($form->fields['submitButton'])) {
+            $submitButton = $form->fields['submitButton'];
+            $submitId = isset($submitButton['uniqElKey']) ? $submitButton['uniqElKey'] : 'submit_button';
+            $this->updateFieldTranslations($submitButton, $submitId, $extractedFields);
+            $form->fields['submitButton'] = $submitButton;
+        }
+
+        // Update step wrapper elements
+        if (isset($form->fields['stepsWrapper']['stepStart'])) {
+            $stepStart = $form->fields['stepsWrapper']['stepStart'];
+            $this->updateFieldTranslations($stepStart, 'step_start', $extractedFields);
+            $form->fields['stepsWrapper']['stepStart'] = $stepStart;
+        }
+
+        if (isset($form->fields['stepsWrapper']['stepEnd'])) {
+            $stepEnd = $form->fields['stepsWrapper']['stepEnd'];
+            $this->updateFieldTranslations($stepEnd, 'step_end', $extractedFields);
+            $form->fields['stepsWrapper']['stepEnd'] = $stepEnd;
+        }
+        
         return $form;
+    }
+    
+    public function translateConfirmationMessage($confirmation, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $confirmation;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], "form_{$form->id}_confirmation_message", $package);
+        
+        return $confirmation;
     }
 
     private function getFormPackage($form)
@@ -240,90 +317,891 @@ class FFWpmlSettingsController
         ];
     }
 
-    private function updateFormFieldsWithTranslations($fields, $translations)
+    private function extractAndRegisterStrings($fields, $formId, $package)
     {
-        foreach ($fields as &$field) {
-            $fieldName = isset($field['attributes']['name']) ? $field['attributes']['name'] : null;
+        $extractedFields = [];
 
-            if ($fieldName) {
-                // Update label
-                $labelKey = "{$fieldName}->Label";
-                if (isset($translations[$labelKey])) {
-                    $field['settings']['label'] = $translations[$labelKey];
+        // Handle both array of fields and single field objects
+        if (is_array($fields)) {
+            foreach ($fields as $field) {
+                $this->extractFieldStrings($extractedFields, $field, $formId);
+            }
+        } else {
+            // If a single object was passed (for submit button or step elements)
+            $this->extractFieldStrings($extractedFields, $fields, $formId);
+        }
+
+        foreach ($extractedFields as $key => $value) {
+            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
+        }
+
+        return $extractedFields;
+    }
+
+    // Extract all translatable strings form fields
+    private function extractFieldStrings(&$fields, $field, $formId, $prefix = '')
+    {
+        $fieldIdentifier = isset($field->attributes->name) ? $field->attributes->name :
+            (isset($field->uniqElKey) ? $field->uniqElKey : null);
+
+        // Special handling for step elements which may not have attributes->name or uniqElKey
+        if (!$fieldIdentifier && isset($field->element)) {
+            if ($field->element === 'step_start') {
+                $fieldIdentifier = 'step_start';
+            } elseif ($field->element === 'step_end') {
+                $fieldIdentifier = 'step_end';
+            } elseif ($field->element === 'button' && isset($field->attributes->type) && $field->attributes->type === 'submit') {
+                $fieldIdentifier = 'submit_button';
+            }
+        }
+
+        if (!$fieldIdentifier) {
+            return;
+        }
+
+        $fieldIdentifier = $prefix . $fieldIdentifier;
+
+        // Extract common fields
+        if (!empty($field->settings->label)) {
+            $fields["{$fieldIdentifier}->Label"] = $field->settings->label;
+        }
+
+        if (!empty($field->attributes->placeholder)) {
+            $fields["{$fieldIdentifier}->placeholder"] = $field->attributes->placeholder;
+        } elseif (!empty($field->settings->placeholder)) {
+            $fields["{$fieldIdentifier}->placeholder"] = $field->settings->placeholder;
+        }
+
+        if (!empty($field->settings->help_message)) {
+            $fields["{$fieldIdentifier}->help_message"] = $field->settings->help_message;
+        }
+
+        if (!empty($field->settings->btn_text)) {
+            $fields["{$fieldIdentifier}->btn_text"] = $field->settings->btn_text;
+        }
+
+        // Handle validation messages
+        if (!empty($field->settings->validation_rules)) {
+            foreach ($field->settings->validation_rules as $rule => $details) {
+                if (!empty($details->message)) {
+                    $fields["{$fieldIdentifier}->Validation Rules->{$rule}"] = $details->message;
+                }
+            }
+        }
+
+        // Handle advanced options
+        if (!empty($field->settings->advanced_options)) {
+            foreach ($field->settings->advanced_options as $option) {
+                if (!empty($option->label)) {
+                    $fields["{$fieldIdentifier}->Options->{$option->value}"] = $option->label;
+                }
+            }
+        }
+
+        // Handle specific field types
+        switch ($field->element) {
+            case 'input_name':
+            case 'address':
+                if (!empty($field->fields)) {
+                    foreach ($field->fields as $subFieldName => $subField) {
+                        $this->extractFieldStrings($fields, $subField, $formId, $fieldIdentifier . '_');
+                    }
+                }
+                break;
+
+            case 'terms_and_condition':
+            case 'gdpr_agreement':
+                if (!empty($field->settings->tnc_html)) {
+                    $fields["{$fieldIdentifier}->tnc_html"] = $field->settings->tnc_html;
+                }
+                break;
+
+            case 'custom_html':
+                if (!empty($field->settings->html_codes)) {
+                    $fields["{$fieldIdentifier}->html_codes"] = $field->settings->html_codes;
+                }
+                break;
+
+            case 'section_break':
+                if (!empty($field->settings->description)) {
+                    $fields["{$fieldIdentifier}->description"] = $field->settings->description;
+                }
+                break;
+
+            case 'tabular_grid':
+                if (!empty($field->settings->grid_columns)) {
+                    foreach ($field->settings->grid_columns as $key => $value) {
+                        $fields["{$fieldIdentifier}->Grid Columns->{$key}"] = $value;
+                    }
+                }
+                if (!empty($field->settings->grid_rows)) {
+                    foreach ($field->settings->grid_rows as $key => $value) {
+                        $fields["{$fieldIdentifier}->Grid Rows->{$key}"] = $value;
+                    }
+                }
+                break;
+
+            case 'form_step':
+                if (isset($field->settings->prev_btn) && isset($field->settings->prev_btn->text)) {
+                    $fields["{$fieldIdentifier}->prev_btn_text"] = $field->settings->prev_btn->text;
+                }
+                if (isset($field->settings->next_btn) && isset($field->settings->next_btn->text)) {
+                    $fields["{$fieldIdentifier}->next_btn_text"] = $field->settings->next_btn->text;
+                }
+                break;
+
+            case 'net_promoter_score':
+                if (!empty($field->settings->start_text)) {
+                    $fields["{$fieldIdentifier}->start_text"] = $field->settings->start_text;
+                }
+                if (!empty($field->settings->end_text)) {
+                    $fields["{$fieldIdentifier}->end_text"] = $field->settings->end_text;
                 }
 
-                // Update placeholder
-                $placeholderKey = "{$fieldName}->placeholder";
-                if (isset($translations[$placeholderKey]) && isset($field['attributes']['placeholder'])) {
-                    $field['attributes']['placeholder'] = $translations[$placeholderKey];
+                // Extract the options values (0-10)
+                if (!empty($field->options)) {
+                    foreach ($field->options as $optionIndex => $optionValue) {
+                        $fields["{$fieldIdentifier}->NPS-Option-{$optionIndex}"] = $optionValue;
+                    }
+                }
+                break;
+
+            case 'multi_payment_component':
+                // Extract price_label
+                if (!empty($field->settings->price_label)) {
+                    $fields["{$fieldIdentifier}->price_label"] = $field->settings->price_label;
                 }
 
-                // Update help message
-                $helpMessageKey = "{$fieldName}->help_message";
-                if (isset($translations[$helpMessageKey])) {
-                    $field['settings']['help_message'] = $translations[$helpMessageKey];
+                // Extract pricing_options labels
+                if (!empty($field->settings->pricing_options)) {
+                    foreach ($field->settings->pricing_options as $index => $option) {
+                        if (!empty($option->label)) {
+                            $fields["{$fieldIdentifier}->pricing_options->{$index}"] = $option->label;
+                        }
+                    }
+                }
+                break;
+
+            case 'subscription_payment_component':
+                // Extract common fields like label and help_message (already handled by common code)
+
+                // Extract price_label
+                if (!empty($field->settings->price_label)) {
+                    $fields["{$fieldIdentifier}->price_label"] = $field->settings->price_label;
                 }
 
-                // Update validation messages
-                if (isset($field['settings']['validation_rules'])) {
-                    foreach ($field['settings']['validation_rules'] as $ruleName => &$rule) {
-                        $validationKey = "{$fieldName}->Validation Rules->{$ruleName}";
-                        if (isset($translations[$validationKey])) {
-                            $rule['message'] = $translations[$validationKey];
+                // Extract subscription_options elements
+                if (!empty($field->settings->subscription_options)) {
+                    foreach ($field->settings->subscription_options as $index => $option) {
+                        // Extract plan name
+                        if (!empty($option->name)) {
+                            $fields["{$fieldIdentifier}->subscription_options->{$index}->name"] = $option->name;
+                        }
+
+                        // Extract billing interval (if it's text and not a code)
+                        if (!empty($option->billing_interval)) {
+                            $fields["{$fieldIdentifier}->subscription_options->{$index}->billing_interval"] = $option->billing_interval;
+                        }
+
+                        // Extract plan features (if they exist)
+                        if (!empty($option->plan_features) && is_array($option->plan_features)) {
+                            foreach ($option->plan_features as $featureIndex => $feature) {
+                                if (is_string($feature)) {
+                                    $fields["{$fieldIdentifier}->subscription_options->{$index}->plan_features->{$featureIndex}"] = $feature;
+                                }
+                            }
                         }
                     }
                 }
 
-                // Update options for radio, checkbox, etc.
-                if (isset($field['settings']['advanced_options'])) {
-                    foreach ($field['settings']['advanced_options'] as &$option) {
-                        $optionKey = "{$fieldName}->{$field['attributes']['name']}->Options->{$option['value']}";
-                        if (isset($translations[$optionKey])) {
-                            $option['label'] = $translations[$optionKey];
+                break;
+
+            case 'container':
+            case 'repeater_container':
+                $containerPrefix = $fieldIdentifier . '_container_';
+                if (!empty($field->columns)) {
+                    foreach ($field->columns as $columnIndex => $column) {
+                        if (!empty($column->fields)) {
+                            foreach ($column->fields as $columnFieldIndex => $columnField) {
+                                if (isset($columnField->attributes->name) || isset($columnField->uniqElKey)) {
+                                    $this->extractFieldStrings($fields, $columnField, $formId, $containerPrefix);
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+
+            case 'repeater_field':
+                $repeaterPrefix = $fieldIdentifier . '_repeater_';
+                if (!empty($field->fields)) {
+                    foreach ($field->fields as $index => $repeaterField) {
+                        // Get field name or use index if not available
+                        $repeaterFieldName = isset($repeaterField->attributes->name) ?
+                            $repeaterField->attributes->name :
+                            (isset($repeaterField->uniqElKey) ?
+                                $repeaterField->uniqElKey :
+                                'field_' . $index);
+
+                        $fullRepeaterFieldName = $repeaterPrefix . $repeaterFieldName;
+
+                        // Extract label
+                        if (!empty($repeaterField->settings->label)) {
+                            $fields["{$fullRepeaterFieldName}->Label"] = $repeaterField->settings->label;
+                        }
+
+                        // Extract help_message
+                        if (!empty($repeaterField->settings->help_message)) {
+                            $fields["{$fullRepeaterFieldName}->help_message"] = $repeaterField->settings->help_message;
+                        }
+
+                        // Extract advanced_options labels for select fields
+                        if ($repeaterField->element === 'select' &&
+                            !empty($repeaterField->settings->advanced_options)) {
+                            foreach ($repeaterField->settings->advanced_options as $option) {
+                                if (!empty($option->label)) {
+                                    $fields["{$fullRepeaterFieldName}->Options->{$option->value}"] = $option->label;
+                                }
+                            }
+                        }
+
+                        // Continue with recursive extraction
+                        $this->extractFieldStrings($fields, $repeaterField, $formId, $repeaterPrefix);
+                    }
+                }
+                break;
+
+            case 'payment_method':
+                // Extract payment methods and their settings
+                if (!empty($field->settings->payment_methods)) {
+                    foreach ($field->settings->payment_methods as $methodKey => $method) {
+                        // Extract method title
+                        if (!empty($method->title)) {
+                            $fields["{$fieldIdentifier}->payment_methods->{$methodKey}->title"] = $method->title;
+                        }
+
+                        // Extract method settings
+                        if (!empty($method->settings)) {
+                            foreach ($method->settings as $settingKey => $setting) {
+                                // Extract option_label value
+                                if ($settingKey === 'option_label' && !empty($setting->value)) {
+                                    $fields["{$fieldIdentifier}->payment_methods->{$methodKey}->option_label->value"] = $setting->value;
+                                }
+
+                                // Extract setting label
+                                if (!empty($setting->label)) {
+                                    $fields["{$fieldIdentifier}->payment_methods->{$methodKey}->{$settingKey}->label"] = $setting->label;
+                                }
+
+                                // If the setting has nested properties (sometimes the case with complex settings)
+                                if (is_object($setting) && !empty(get_object_vars($setting))) {
+                                    foreach ($setting as $propKey => $propValue) {
+                                        if ($propKey === 'label' && is_string($propValue)) {
+                                            $fields["{$fieldIdentifier}->payment_methods->{$methodKey}->{$settingKey}->{$propKey}"] = $propValue;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
-                // Update inventory stockout message
-                $stockOutKey = "{$fieldName}->stock_out_message";
-                if (isset($translations[$stockOutKey])) {
-                    $field['settings']['inventory_stockout_message'] = $translations[$stockOutKey];
+                break;
+
+            case 'payment_coupon':
+                // Extract the suffix_label
+                if (!empty($field->settings->suffix_label)) {
+                    $fields["{$fieldIdentifier}->suffix_label"] = $field->settings->suffix_label;
+                }
+                break;
+
+            case 'button':
+                // Extract button text
+                if (!empty($field->settings->button_ui) && !empty($field->settings->button_ui->text)) {
+                    $fields["{$fieldIdentifier}->button_ui->text"] = $field->settings->button_ui->text;
+                }
+
+                break;
+
+            case 'step_start':
+                // Extract step titles if they exist
+                if (!empty($field->settings->step_titles)) {
+                    foreach ($field->settings->step_titles as $index => $title) {
+                        if (!empty($title)) {
+                            $fields["{$fieldIdentifier}->step_titles->{$index}"] = $title;
+                        }
+                    }
+                }
+                break;
+
+            case 'step_end':
+                // Extract previous button text
+                if (!empty($field->settings->prev_btn) && !empty($field->settings->prev_btn->text)) {
+                    $fields["{$fieldIdentifier}->prev_btn->text"] = $field->settings->prev_btn->text;
+                }
+                break;
+        }
+    }
+
+    // Extract translatable strings from form settings
+    private function extractAndRegisterFormSettingsStrings($settings, $formId, $package)
+    {
+        $extractedStrings = [];
+
+        // Confirmation settings
+        if (isset($settings['formSettings']['confirmation']['messageToShow'])) {
+            $extractedStrings["form_{$formId}_confirmation_message"] = $settings['formSettings']['confirmation']['messageToShow'];
+        }
+
+        // Restriction messages
+        if (isset($settings['formSettings']['restrictions'])) {
+            $restrictions = $settings['formSettings']['restrictions'];
+
+            // Entry limit message
+            if (isset($restrictions['limitNumberOfEntries']['limitReachedMsg'])) {
+                $extractedStrings["form_{$formId}_limit_reached_message"] = $restrictions['limitNumberOfEntries']['limitReachedMsg'];
+            }
+
+            // Schedule messages
+            if (isset($restrictions['scheduleForm'])) {
+                if (isset($restrictions['scheduleForm']['pendingMsg'])) {
+                    $extractedStrings["form_{$formId}_pending_message"] = $restrictions['scheduleForm']['pendingMsg'];
+                }
+                if (isset($restrictions['scheduleForm']['expiredMsg'])) {
+                    $extractedStrings["form_{$formId}_expired_message"] = $restrictions['scheduleForm']['expiredMsg'];
                 }
             }
 
-            // Handle nested fields (like for input_name)
-            if (isset($field['fields']) && is_array($field['fields'])) {
-                foreach ($field['fields'] as $subFieldName => &$subField) {
-                    $this->updateSubField($subField, $subFieldName, $translations);
+            // Login requirement message
+            if (isset($restrictions['requireLogin']['requireLoginMsg'])) {
+                $extractedStrings["form_{$formId}_require_login_message"] = $restrictions['requireLogin']['requireLoginMsg'];
+            }
+
+            // Empty submission message
+            if (isset($restrictions['denyEmptySubmission']['message'])) {
+                $extractedStrings["form_{$formId}_empty_submission_message"] = $restrictions['denyEmptySubmission']['message'];
+            }
+
+            // Form restriction messages
+            if (isset($restrictions['restrictForm']['fields'])) {
+                $restrictFields = $restrictions['restrictForm']['fields'];
+
+                if (isset($restrictFields['ip']['message'])) {
+                    $extractedStrings["form_{$formId}_ip_restriction_message"] = $restrictFields['ip']['message'];
                 }
+
+                if (isset($restrictFields['country']['message'])) {
+                    $extractedStrings["form_{$formId}_country_restriction_message"] = $restrictFields['country']['message'];
+                }
+
+                if (isset($restrictFields['keywords']['message'])) {
+                    $extractedStrings["form_{$formId}_keyword_restriction_message"] = $restrictFields['keywords']['message'];
+                }
+            }
+        }
+
+        // Notification templates
+        if (isset($settings['notifications'])) {
+            if (is_array($settings['notifications'])) {
+                foreach ($settings['notifications'] as $index => $notification) {
+                    if (isset($notification['subject'])) {
+                        $extractedStrings["form_{$formId}_notification_{$index}_subject"] = $notification['subject'];
+                    }
+                    if (isset($notification['message'])) {
+                        $extractedStrings["form_{$formId}_notification_{$index}_message"] = $notification['message'];
+                    }
+                }
+            } else {
+                // Handle single notification object
+                if (isset($settings['notifications']['subject'])) {
+                    $extractedStrings["form_{$formId}_notification_subject"] = $settings['notifications']['subject'];
+                }
+                if (isset($settings['notifications']['message'])) {
+                    $extractedStrings["form_{$formId}_notification_message"] = $settings['notifications']['message'];
+                }
+            }
+        }
+
+        // Register all extracted strings with WPML in one go
+        foreach ($extractedStrings as $key => $value) {
+            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
+        }
+    }
+    // Update form settings with translations
+    private function updateFormSettingsTranslations(&$settings, $translations, $formId)
+    {
+        // Confirmation message
+        if (isset($settings['confirmation']['messageToShow'])) {
+            $key = "form_{$formId}_confirmation_message";
+            if (isset($translations[$key])) {
+                $settings['confirmation']['messageToShow'] = $translations[$key];
+            }
+        }
+
+        // Restrictions
+        if (isset($settings['restrictions'])) {
+            $restrictions = &$settings['restrictions'];
+
+            // Entry limit message
+            if (isset($restrictions['limitNumberOfEntries']['limitReachedMsg'])) {
+                $key = "form_{$formId}_limit_reached_message";
+                if (isset($translations[$key])) {
+                    $restrictions['limitNumberOfEntries']['limitReachedMsg'] = $translations[$key];
+                }
+            }
+
+            // Schedule messages
+            if (isset($restrictions['scheduleForm'])) {
+                if (isset($restrictions['scheduleForm']['pendingMsg'])) {
+                    $key = "form_{$formId}_pending_message";
+                    if (isset($translations[$key])) {
+                        $restrictions['scheduleForm']['pendingMsg'] = $translations[$key];
+                    }
+                }
+
+                if (isset($restrictions['scheduleForm']['expiredMsg'])) {
+                    $key = "form_{$formId}_expired_message";
+                    if (isset($translations[$key])) {
+                        $restrictions['scheduleForm']['expiredMsg'] = $translations[$key];
+                    }
+                }
+
+                // Selected days
+                if (isset($restrictions['scheduleForm']['selectedDays']) &&
+                    is_array($restrictions['scheduleForm']['selectedDays'])) {
+                    foreach ($restrictions['scheduleForm']['selectedDays'] as $index => &$day) {
+                        $key = "form_{$formId}_schedule_day_{$index}";
+                        if (isset($translations[$key])) {
+                            $day = $translations[$key];
+                        }
+                    }
+                }
+            }
+
+            // Login requirement message
+            if (isset($restrictions['requireLogin']['requireLoginMsg'])) {
+                $key = "form_{$formId}_require_login_message";
+                if (isset($translations[$key])) {
+                    $restrictions['requireLogin']['requireLoginMsg'] = $translations[$key];
+                }
+            }
+
+            // Empty submission message
+            if (isset($restrictions['denyEmptySubmission']['message'])) {
+                $key = "form_{$formId}_empty_submission_message";
+                if (isset($translations[$key])) {
+                    $restrictions['denyEmptySubmission']['message'] = $translations[$key];
+                }
+            }
+
+            // Form restriction messages
+            if (isset($restrictions['restrictForm']['fields'])) {
+                $restrictFields = &$restrictions['restrictForm']['fields'];
+
+                if (isset($restrictFields['ip']['message'])) {
+                    $key = "form_{$formId}_ip_restriction_message";
+                    if (isset($translations[$key])) {
+                        $restrictFields['ip']['message'] = $translations[$key];
+                    }
+                }
+
+                if (isset($restrictFields['country']['message'])) {
+                    $key = "form_{$formId}_country_restriction_message";
+                    if (isset($translations[$key])) {
+                        $restrictFields['country']['message'] = $translations[$key];
+                    }
+                }
+
+                if (isset($restrictFields['keywords']['message'])) {
+                    $key = "form_{$formId}_keyword_restriction_message";
+                    if (isset($translations[$key])) {
+                        $restrictFields['keywords']['message'] = $translations[$key];
+                    }
+                }
+            }
+        }
+    }
+
+    private function updateFormFieldsWithTranslations($fields, $translations, $prefix = '')
+    {
+        foreach ($fields as &$field) {
+            $fieldName = isset($field['attributes']['name']) ? $field['attributes']['name'] :
+                (isset($field['uniqElKey']) ? $field['uniqElKey'] : null);
+
+            if (!$fieldName) {
+                continue;
+            }
+
+            // Apply prefix if we're in a nested structure
+            $fullFieldName = $prefix ? $prefix . $fieldName : $fieldName;
+
+            // Update this field with translations
+            $this->updateFieldTranslations($field, $fullFieldName, $translations);
+
+            // Handle special field types with nested structures
+            switch ($field['element']) {
+                // Handle address and name fields
+                case 'input_name':
+                case 'address':
+                    if (!empty($field['fields'])) {
+                        foreach ($field['fields'] as $subFieldName => &$subField) {
+                            $subFieldKey = $fullFieldName . '_' . $subFieldName;
+                            $this->updateFieldTranslations($subField, $subFieldKey, $translations);
+                        }
+                    }
+                    break;
+
+                // Handle container and repeater_container
+                case 'container':
+                case 'repeater_container':
+                    $containerPrefix = $fullFieldName . '_container_';
+                    if (!empty($field['columns'])) {
+                        foreach ($field['columns'] as &$column) {
+                            if (!empty($column['fields'])) {
+                                foreach ($column['fields'] as &$columnField) {
+                                    $columnFieldName = isset($columnField['attributes']['name']) ?
+                                        $columnField['attributes']['name'] :
+                                        (isset($columnField['uniqElKey']) ? $columnField['uniqElKey'] : null);
+
+                                    if ($columnFieldName) {
+                                        $fullColumnFieldName = $containerPrefix . $columnFieldName;
+                                        $this->updateFieldTranslations($columnField, $fullColumnFieldName,
+                                            $translations);
+
+                                        // Recursively handle nested fields within containers
+                                        if (in_array($columnField['element'], [
+                                            'input_name',
+                                            'address',
+                                            'container',
+                                            'repeater_container',
+                                            'repeater_field'
+                                        ])) {
+                                            $tempFields = [$columnField];
+                                            $tempFields = $this->updateFormFieldsWithTranslations($tempFields,
+                                                $translations, $containerPrefix);
+                                            $columnField = $tempFields[0];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                case 'repeater_field':
+                    $repeaterPrefix = $fullFieldName . '_repeater_';
+
+                    // Process each field within the repeater
+                    if (!empty($field['fields'])) {
+                        foreach ($field['fields'] as $index => &$repeaterField) {
+                            // Get field name or use index if not available
+                            $repeaterFieldName = isset($repeaterField['attributes']['name']) ?
+                                $repeaterField['attributes']['name'] :
+                                (isset($repeaterField['uniqElKey']) ?
+                                    $repeaterField['uniqElKey'] :
+                                    'field_' . $index);
+
+                            $fullRepeaterFieldName = $repeaterPrefix . $repeaterFieldName;
+
+                            // Directly translate label
+                            if (isset($translations["{$fullRepeaterFieldName}->Label"]) &&
+                                isset($repeaterField['settings']['label'])) {
+                                $repeaterField['settings']['label'] = $translations["{$fullRepeaterFieldName}->Label"];
+                            }
+
+                            // Directly translate help_message
+                            if (isset($translations["{$fullRepeaterFieldName}->help_message"]) &&
+                                isset($repeaterField['settings']['help_message'])) {
+                                $repeaterField['settings']['help_message'] = $translations["{$fullRepeaterFieldName}->help_message"];
+                            }
+
+                            // Translate advanced_options labels for select fields
+                            if ($repeaterField['element'] === 'select' &&
+                                isset($repeaterField['settings']['advanced_options'])) {
+                                foreach ($repeaterField['settings']['advanced_options'] as &$option) {
+                                    $optionKey = "{$fullRepeaterFieldName}->Options->{$option['value']}";
+                                    if (isset($translations[$optionKey])) {
+                                        $option['label'] = $translations[$optionKey];
+                                    }
+                                }
+                            }
+
+                            // Then process all other translations
+                            $this->updateFieldTranslations($repeaterField, $fullRepeaterFieldName, $translations);
+
+                            // Recursively handle nested fields if needed
+                            if (in_array($repeaterField['element'],
+                                ['input_name', 'address', 'container', 'repeater_container', 'repeater_field'])) {
+                                $tempFields = [$repeaterField];
+                                $tempFields = $this->updateFormFieldsWithTranslations($tempFields, $translations,
+                                    $repeaterPrefix);
+                                $repeaterField = $tempFields[0];
+                            }
+                        }
+                    }
+                    break;
             }
         }
 
         return $fields;
     }
 
-    private function updateSubField(&$subField, $subFieldName, $translations)
+    private function updateFieldTranslations(&$field, $fieldName, $translations)
     {
-        // Update label
-        $labelKey = "{$subFieldName}->Label";
-        if (isset($translations[$labelKey])) {
-            $subField['settings']['label'] = $translations[$labelKey];
+        // Update common fields
+        if (isset($translations["{$fieldName}->Label"])) {
+            $field['settings']['label'] = $translations["{$fieldName}->Label"];
         }
 
-        // Update placeholder
-        $placeholderKey = "{$subFieldName}->placeholder";
-        if (isset($translations[$placeholderKey]) && isset($subField['attributes']['placeholder'])) {
-            $subField['attributes']['placeholder'] = $translations[$placeholderKey];
+        if (isset($translations["{$fieldName}->placeholder"])) {
+            if (isset($field['attributes']['placeholder'])) {
+                $field['attributes']['placeholder'] = $translations["{$fieldName}->placeholder"];
+            }
+            if (isset($field['settings']['placeholder'])) {
+                $field['settings']['placeholder'] = $translations["{$fieldName}->placeholder"];
+            }
+        }
+
+        if (isset($translations["{$fieldName}->help_message"])) {
+            $field['settings']['help_message'] = $translations["{$fieldName}->help_message"];
+        }
+
+        if (isset($translations["{$fieldName}->btn_text"])) {
+            $field['settings']['btn_text'] = $translations["{$fieldName}->btn_text"];
         }
 
         // Update validation messages
-        if (isset($subField['settings']['validation_rules'])) {
-            foreach ($subField['settings']['validation_rules'] as $ruleName => &$rule) {
-                $validationKey = "{$subFieldName}->Validation Rules->{$ruleName}";
-                if (isset($translations[$validationKey])) {
-                    $rule['message'] = $translations[$validationKey];
+        if (isset($field['settings']['validation_rules'])) {
+            foreach ($field['settings']['validation_rules'] as $rule => &$details) {
+                $key = "{$fieldName}->Validation Rules->{$rule}";
+                if (isset($translations[$key])) {
+                    $details['message'] = $translations[$key];
                 }
             }
+        }
+
+        // Update advanced options
+        if (isset($field['settings']['advanced_options'])) {
+            foreach ($field['settings']['advanced_options'] as &$option) {
+                $key = "{$fieldName}->Options->{$option['value']}";
+                if (isset($translations[$key])) {
+                    $option['label'] = $translations[$key];
+                }
+            }
+        }
+
+        // Handle specific field types
+        switch ($field['element']) {
+            case 'terms_and_condition':
+            case 'gdpr_agreement':
+                $key = "{$fieldName}->tnc_html";
+                if (isset($translations[$key])) {
+                    $field['settings']['tnc_html'] = $translations[$key];
+                }
+                break;
+
+            case 'custom_html':
+                $key = "{$fieldName}->html_codes";
+                if (isset($translations[$key])) {
+                    $field['settings']['html_codes'] = $translations[$key];
+                }
+                break;
+
+            case 'section_break':
+                $key = "{$fieldName}->description";
+                if (isset($translations[$key])) {
+                    $field['settings']['description'] = $translations[$key];
+                }
+                break;
+
+            case 'net_promoter_score':
+                $startTextKey = "{$fieldName}->start_text";
+                $endTextKey = "{$fieldName}->end_text";
+                if (isset($translations[$startTextKey])) {
+                    $field['settings']['start_text'] = $translations[$startTextKey];
+                }
+                if (isset($translations[$endTextKey])) {
+                    $field['settings']['end_text'] = $translations[$endTextKey];
+                }
+
+                // Update the options values (0-10)
+                if (isset($field['options']) && is_array($field['options'])) {
+                    foreach ($field['options'] as $optionIndex => $optionValue) {
+                        $optionKey = "{$fieldName}->NPS-Option-{$optionIndex}";
+                        if (isset($translations[$optionKey])) {
+                            $field['options'][$optionIndex] = $translations[$optionKey];
+                        }
+                    }
+                }
+                break;
+
+            case 'tabular_grid':
+                if (isset($field['settings']['grid_columns'])) {
+                    foreach ($field['settings']['grid_columns'] as $key => &$value) {
+                        $columnKey = "{$fieldName}->Grid Columns->{$key}";
+                        if (isset($translations[$columnKey])) {
+                            $value = $translations[$columnKey];
+                        }
+                    }
+                }
+                if (isset($field['settings']['grid_rows'])) {
+                    foreach ($field['settings']['grid_rows'] as $key => &$value) {
+                        $rowKey = "{$fieldName}->Grid Rows->{$key}";
+                        if (isset($translations[$rowKey])) {
+                            $value = $translations[$rowKey];
+                        }
+                    }
+                }
+                break;
+
+            case 'form_step':
+                $prevBtnKey = "{$fieldName}->prev_btn_text";
+                $nextBtnKey = "{$fieldName}->next_btn_text";
+                if (isset($translations[$prevBtnKey]) && isset($field['settings']['prev_btn'])) {
+                    $field['settings']['prev_btn']['text'] = $translations[$prevBtnKey];
+                }
+                if (isset($translations[$nextBtnKey]) && isset($field['settings']['next_btn'])) {
+                    $field['settings']['next_btn']['text'] = $translations[$nextBtnKey];
+                }
+                break;
+
+            case 'multi_payment_component':
+                $priceLabelKey = "{$fieldName}->price_label";
+                if (isset($translations[$priceLabelKey])) {
+                    $field['settings']['price_label'] = $translations[$priceLabelKey];
+                }
+
+                // Update pricing_options labels
+                if (isset($field['settings']['pricing_options']) && is_array($field['settings']['pricing_options'])) {
+                    foreach ($field['settings']['pricing_options'] as $index => &$option) {
+                        $optionKey = "{$fieldName}->pricing_options->{$index}";
+                        if (isset($translations[$optionKey])) {
+                            $option['label'] = $translations[$optionKey];
+                        }
+                    }
+                }
+
+                break;
+
+            case 'subscription_payment_component':
+                // Update price_label
+                $priceLabelKey = "{$fieldName}->price_label";
+                if (isset($translations[$priceLabelKey])) {
+                    $field['settings']['price_label'] = $translations[$priceLabelKey];
+                }
+
+                // Update subscription_options elements
+                if (isset($field['settings']['subscription_options']) && is_array($field['settings']['subscription_options'])) {
+                    foreach ($field['settings']['subscription_options'] as $index => &$option) {
+                        // Update plan name
+                        $nameKey = "{$fieldName}->subscription_options->{$index}->name";
+                        if (isset($translations[$nameKey])) {
+                            $option['name'] = $translations[$nameKey];
+                        }
+
+                        // Update billing interval (if it's text and not a code)
+                        $intervalKey = "{$fieldName}->subscription_options->{$index}->billing_interval";
+                        if (isset($translations[$intervalKey])) {
+                            $option['billing_interval'] = $translations[$intervalKey];
+                        }
+
+                        // Update plan features (if they exist)
+                        if (isset($option['plan_features']) && is_array($option['plan_features'])) {
+                            foreach ($option['plan_features'] as $featureIndex => &$feature) {
+                                $featureKey = "{$fieldName}->subscription_options->{$index}->plan_features->{$featureIndex}";
+                                if (isset($translations[$featureKey])) {
+                                    $feature = $translations[$featureKey];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                break;
+
+            case 'payment_coupon':
+                $suffixLabelKey = "{$fieldName}->suffix_label";
+                if (isset($translations[$suffixLabelKey])) {
+                    $field['settings']['suffix_label'] = $translations[$suffixLabelKey];
+                }
+                break;
+
+            case 'payment_method':
+                // Update payment methods and their settings
+                if (isset($field['settings']['payment_methods']) && is_array($field['settings']['payment_methods'])) {
+                    foreach ($field['settings']['payment_methods'] as $methodKey => &$method) {
+                        // Update method title
+                        $titleKey = "{$fieldName}->payment_methods->{$methodKey}->title";
+                        if (isset($translations[$titleKey])) {
+                            $method['title'] = $translations[$titleKey];
+                        }
+
+                        // Update method settings
+                        if (isset($method['settings']) && is_array($method['settings'])) {
+                            foreach ($method['settings'] as $settingKey => &$setting) {
+                                // Update option_label value
+                                if ($settingKey === 'option_label' && isset($setting['value'])) {
+                                    $optionLabelKey = "{$fieldName}->payment_methods->{$methodKey}->option_label->value";
+                                    if (isset($translations[$optionLabelKey])) {
+                                        $setting['value'] = $translations[$optionLabelKey];
+                                    }
+                                }
+
+                                // Update setting label
+                                $labelKey = "{$fieldName}->payment_methods->{$methodKey}->{$settingKey}->label";
+                                if (isset($translations[$labelKey]) && isset($setting['label'])) {
+                                    $setting['label'] = $translations[$labelKey];
+                                }
+
+                                // If the setting has nested properties
+                                foreach ($setting as $propKey => &$propValue) {
+                                    if ($propKey === 'label' && is_string($propValue)) {
+                                        $propLabelKey = "{$fieldName}->payment_methods->{$methodKey}->{$settingKey}->{$propKey}";
+                                        if (isset($translations[$propLabelKey])) {
+                                            $propValue = $translations[$propLabelKey];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+
+            // For the submit button
+            case 'button':
+                // Update button text
+                if (isset($field['settings']['button_ui']) && isset($field['settings']['button_ui']['text'])) {
+                    $buttonTextKey = "{$fieldName}->button_ui->text";
+                    if (isset($translations[$buttonTextKey])) {
+                        $field['settings']['button_ui']['text'] = $translations[$buttonTextKey];
+                    }
+                }
+                break;
+
+            // For step_start element  
+            case 'step_start':
+                // Update step titles if they exist
+                if (isset($field['settings']['step_titles']) && is_array($field['settings']['step_titles'])) {
+                    foreach ($field['settings']['step_titles'] as $index => &$title) {
+                        $titleKey = "{$fieldName}->step_titles->{$index}";
+                        if (isset($translations[$titleKey])) {
+                            $title = $translations[$titleKey];
+                        }
+                    }
+                }
+                break;
+
+            // For step_end element
+            case 'step_end':
+                // Update previous button text
+                if (isset($field['settings']['prev_btn']) && isset($field['settings']['prev_btn']['text'])) {
+                    $prevBtnTextKey = "{$fieldName}->prev_btn->text";
+                    if (isset($translations[$prevBtnTextKey])) {
+                        $field['settings']['prev_btn']['text'] = $translations[$prevBtnTextKey];
+                    }
+                }
+                break;
         }
     }
 
