@@ -24,10 +24,33 @@ class FFWpmlSettingsController
 
     public function init()
     {
+        add_action('init', [$this, 'setupLanguageForAjax'], 5);
+        
         add_filter('fluentform/ajax_url', [$this, 'setAjaxLanguage'], 10, 1);
         add_filter('fluentform/rendering_form', [$this, 'setWpmlForm'], 10, 1);
         add_filter('fluentform/recaptcha_lang', [$this, 'setRecaptchaLanguage'], 10, 1);
 
+        add_filter('fluentform/form_submission_confirmation', [$this, 'translateConfirmationMessage'], 10, 3);
+        add_filter('fluentform/entry_limit_reached_message', [$this, 'translateLimitReachedMessage'], 10, 2);
+        add_filter('fluentform/schedule_form_pending_message', [$this, 'translateFormPendingMessage'], 10, 2);
+        add_filter('fluentform/schedule_form_expired_message', [$this, 'translateFormExpiredMessage'], 10, 2);
+        add_filter('fluentform/form_requires_login_message', [$this, 'translateFormLoginMessage'], 10, 2);
+        add_filter('fluentform/deny_empty_submission_message', [$this, 'translateEmptySubmissionMessage'], 10, 2);
+        add_filter('fluentform/ip_restriction_message', [$this, 'translateIpRestrictionMessage'], 10, 2);
+        add_filter('fluentform/country_restriction_message', [$this, 'translateCountryRestrictionMessage'], 10, 2);
+        add_filter('fluentform/keyword_restriction_message', [$this, 'translateKeywordRestrictionMessage'], 10, 2);
+
+        add_filter('fluentform/integration_feed_before_parse', [$this, 'translateFeedValuesBeforeParse'], 10, 4);
+
+        add_filter('fluentform/input_label_shortcode', [$this, 'translateLabelShortcode'], 10, 3);
+
+        add_filter('fluentform/all_data_shortcode_html', [$this, 'translateAllDataShortcode'],10, 4);
+
+        add_filter('fluentform_pdf/check_wpml_active', [$this, 'isWpmlActive'], 10, 1);
+        add_filter('fluentform_pdf/get_current_language', [$this, 'getCurrentWpmlLanguage'], 10, 1);
+        add_filter('fluentform_pdf/add_language_to_url', [$this, 'addLanguageToUrl'], 10, 1);
+        add_filter('fluentform_pdf/handle_language_for_pdf', [$this, 'handleLanguageForPdf'], 10, 1);
+        
         $this->handleAdmin();
     }
 
@@ -40,7 +63,6 @@ class FFWpmlSettingsController
         add_action('fluentform/form_settings_menu', [$this, 'pushSettings'], 10, 2);
         add_filter('fluentform/form_fields_update', [$this, 'handleFormFieldUpdate'], 10, 2);
         add_action('fluentform/after_form_delete', [$this, 'removeWpmlStrings'], 10, 1);
-        add_filter('fluentform/form_submission_confirmation', [$this, 'translateConfirmationMessage'], 10, 3);
     }
 
     public function getWpmlSettings()
@@ -73,15 +95,25 @@ class FFWpmlSettingsController
                 '_ff_form_styles',
                 'ff_wpml',
                 '_total_views',
-                'revision'
+                'revision',
+                '_landing_page_settings',
+                'template_name'
             ])
             ->get()
             ->reduce(function ($result, $item) {
                 $value = $item['value'];
                 $decodedValue = json_decode($value, true);
-                $result[$item['meta_key']] = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
+                $metaValue = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
+
+                if (!isset($result[$item['meta_key']])) {
+                    $result[$item['meta_key']] = [];
+                }
+
+                $result[$item['meta_key']][$item['id']] = $metaValue;
+
                 return $result;
             }, []);
+
         $form->settings = $formSettings;
         
         $formFields = FormFieldsParser::getFields($form);
@@ -123,25 +155,36 @@ class FFWpmlSettingsController
             return $formFields;
         }
 
-        $form = Form::find($formId);$formSettings = FormMeta
-        ::where('form_id', $formId)
-        ->whereNot('meta_key', [
-            'step_data_persistency_status',
-            'form_save_state_status',
-            '_primary_email_field',
-            'ffs_default',
-            '_ff_form_styles',
-            'ff_wpml',
-            '_total_views',
-            'revision'
-        ])
-        ->get()
-        ->reduce(function ($result, $item) {
-            $value = $item['value'];
-            $decodedValue = json_decode($value, true);
-            $result[$item['meta_key']] = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
-            return $result;
-        }, []);
+        $form = Form::find($formId);
+        $formSettings = FormMeta
+            ::where('form_id', $formId)
+            ->whereNot('meta_key', [
+                'step_data_persistency_status',
+                'form_save_state_status',
+                '_primary_email_field',
+                'ffs_default',
+                '_ff_form_styles',
+                'ff_wpml',
+                '_total_views',
+                'revision',
+                '_landing_page_settings',
+                'template_name'
+            ])
+            ->get()
+            ->reduce(function ($result, $item) {
+                $value = $item['value'];
+                $decodedValue = json_decode($value, true);
+                $metaValue = (json_last_error() === JSON_ERROR_NONE) ? $decodedValue : $value;
+
+                if (!isset($result[$item['meta_key']])) {
+                    $result[$item['meta_key']] = [];
+                }
+
+                $result[$item['meta_key']][$item['id']] = $metaValue;
+
+                return $result;
+            }, []);
+        
         $form->settings = $formSettings;
         
         $package = $this->getFormPackage($form);
@@ -185,7 +228,6 @@ class FFWpmlSettingsController
 
     public function removeWpmlSettings($formId)
     {
-        $request = $this->app->request->get();
         $this->removeWpmlStrings($formId);
         wp_send_json_success(__('Translations removed successfully.', 'fluentformwpml'));
     }
@@ -307,6 +349,133 @@ class FFWpmlSettingsController
         
         return $confirmation;
     }
+    
+    public function translateLimitReachedMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_limit_reached_message", $package);
+    }
+
+    public function translateFormPendingMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_pending_message", $package);
+    }
+    
+    public function translateFormExpiredMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_expired_message", $package);
+    }
+    
+    public function translateFormLoginMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_require_login_message", $package);
+    }
+    
+    public function translateEmptySubmissionMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_empty_submission_message", $package);
+    }
+    
+    public function translateIpRestrictionMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_ip_restriction_message", $package);
+    }
+
+    public function translateCountryRestrictionMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_country_restriction_message", $package);
+    }
+
+    public function translateKeywordRestrictionMessage($message, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_keyword_restriction_message", $package);
+    }
+    
+    public function translateFeedValuesBeforeParse(&$feed, $insertId, $formData, $form)
+    {
+        $formId = $form->id;
+        $package = $this->getFormPackage($form);
+        $id = ArrayHelper::get($feed, 'id');
+        
+        // email notification
+        if (ArrayHelper::get($feed, 'meta_key') === 'notifications') {
+            if (isset($feed['settings']['subject'])) {
+                $key = "form_{$formId}_notification_{$id}_subject";
+                $feed['settings']['subject'] = apply_filters('wpml_translate_string',
+                    $feed['settings']['subject'], $key, $package);
+            }
+            if (isset($feed['settings']['message'])) {
+                $key = "form_{$formId}_notification_{$id}_message";
+                $feed['settings']['message'] = apply_filters('wpml_translate_string',
+                    $feed['settings']['message'], $key, $package);
+            }
+        }
+
+        // pdf
+        if (ArrayHelper::get($feed, 'meta_key') === '_pdf_feeds') {
+            if (isset($feed['settings']['header'])) {
+                $key = "form_{$formId}_pdf_{$id}_header";
+                $feed['settings']['header'] = apply_filters('wpml_translate_string', $feed['settings']['header'], $key, $package);
+            }
+            if (isset($feed['settings']['body'])) {
+                $key = "form_{$formId}_pdf_{$id}_body";
+                $feed['settings']['body'] = apply_filters('wpml_translate_string', $feed['settings']['body'], $key, $package);
+            }
+            if (isset($feed['settings']['footer'])) {
+                $key = "form_{$formId}_pdf_{$id}_footer";
+                $feed['settings']['footer'] = apply_filters('wpml_translate_string', $feed['settings']['footer'], $key, $package);
+            }
+        }
+        
+        return $feed;
+    }
 
     private function getFormPackage($form)
     {
@@ -332,7 +501,13 @@ class FFWpmlSettingsController
         }
 
         foreach ($extractedFields as $key => $value) {
-            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
+            // Check if the string contains shortcodes or HTML
+            $type = 'LINE';
+            if (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false) {
+                $type = 'AREA'; // Use AREA for HTML/shortcodes
+            }
+
+            do_action('wpml_register_string', $value, $key, $package, $formId, $type);
         }
 
         return $extractedFields;
@@ -364,6 +539,10 @@ class FFWpmlSettingsController
         // Extract common fields
         if (!empty($field->settings->label)) {
             $fields["{$fieldIdentifier}->Label"] = $field->settings->label;
+        }
+
+        if (!empty($field->settings->admin_label)) {
+            $fields["{$fieldIdentifier}->admin_label"] = $field->settings->admin_field_label;
         }
 
         if (!empty($field->attributes->placeholder)) {
@@ -649,13 +828,13 @@ class FFWpmlSettingsController
         $extractedStrings = [];
 
         // Confirmation settings
-        if (isset($settings['formSettings']['confirmation']['messageToShow'])) {
-            $extractedStrings["form_{$formId}_confirmation_message"] = $settings['formSettings']['confirmation']['messageToShow'];
+        if (isset($settings['formSettings'][0]['confirmation']['messageToShow'])) {
+            $extractedStrings["form_{$formId}_confirmation_message"] = $settings['formSettings'][0]['confirmation']['messageToShow'];
         }
 
         // Restriction messages
-        if (isset($settings['formSettings']['restrictions'])) {
-            $restrictions = $settings['formSettings']['restrictions'];
+        if (isset($settings['formSettings'][0]['restrictions'])) {
+            $restrictions = $settings['formSettings'][0]['restrictions'];
 
             // Entry limit message
             if (isset($restrictions['limitNumberOfEntries']['limitReachedMsg'])) {
@@ -700,125 +879,70 @@ class FFWpmlSettingsController
             }
         }
 
-        // Notification templates
+        // Notifications - now definitely an array of arrays
         if (isset($settings['notifications'])) {
-            if (is_array($settings['notifications'])) {
-                foreach ($settings['notifications'] as $index => $notification) {
-                    if (isset($notification['subject'])) {
-                        $extractedStrings["form_{$formId}_notification_{$index}_subject"] = $notification['subject'];
-                    }
-                    if (isset($notification['message'])) {
-                        $extractedStrings["form_{$formId}_notification_{$index}_message"] = $notification['message'];
-                    }
+            foreach ($settings['notifications'] as $index => $notification) {
+                if (isset($notification['subject'])) {
+                    $extractedStrings["form_{$formId}_notification_{$index}_subject"] = $notification['subject'];
                 }
-            } else {
-                // Handle single notification object
-                if (isset($settings['notifications']['subject'])) {
-                    $extractedStrings["form_{$formId}_notification_subject"] = $settings['notifications']['subject'];
-                }
-                if (isset($settings['notifications']['message'])) {
-                    $extractedStrings["form_{$formId}_notification_message"] = $settings['notifications']['message'];
+                if (isset($notification['message'])) {
+                    $extractedStrings["form_{$formId}_notification_{$index}_message"] = $notification['message'];
                 }
             }
         }
 
-        // Register all extracted strings with WPML in one go
+        // Double Opt-in Settings
+        if (isset($settings['double_optin_settings'])) {
+            foreach ($settings['double_optin_settings'] as $optinSettings) {
+                if (isset($optinSettings['confirmation_message'])) {
+                    $extractedStrings["form_{$formId}_optin_confirmation_message"] = $optinSettings['confirmation_message'];
+                }
+
+                if (isset($optinSettings['email_subject'])) {
+                    $extractedStrings["form_{$formId}_optin_email_subject"] = $optinSettings['email_subject'];
+                }
+
+                if (isset($optinSettings['email_body'])) {
+                    $extractedStrings["form_{$formId}_optin_email_body"] = $optinSettings['email_body'];
+                }
+
+                break;
+            }
+        }
+
+        // Advanced Validation Settings
+        if (isset($settings['advancedValidationSettings'])) {
+            foreach ($settings['advancedValidationSettings'] as $validationSettings) {
+                if (isset($validationSettings['error_message'])) {
+                    $extractedStrings["form_{$formId}_advanced_validation_error"] = $validationSettings['error_message'];
+                    break; // Only process the first one
+                }
+            }
+        }
+
+        // PDF Feeds
+        if (isset($settings['_pdf_feeds'])) {
+            foreach ($settings['_pdf_feeds'] as $index => $feed) {
+                if (isset($feed['settings']['header'])) {
+                    $extractedStrings["form_{$formId}_pdf_{$index}_header"] = $feed['settings']['header'];
+                }
+                if (isset($feed['settings']['footer'])) {
+                    $extractedStrings["form_{$formId}_pdf_{$index}_footer"] = $feed['settings']['footer'];
+                }
+                if (isset($feed['settings']['body'])) {
+                    $extractedStrings["form_{$formId}_pdf_{$index}_body"] = $feed['settings']['body'];
+                }
+            }
+        }
+
         foreach ($extractedStrings as $key => $value) {
-            do_action('wpml_register_string', $value, $key, $package, $formId, 'LINE');
-        }
-    }
-    // Update form settings with translations
-    private function updateFormSettingsTranslations(&$settings, $translations, $formId)
-    {
-        // Confirmation message
-        if (isset($settings['confirmation']['messageToShow'])) {
-            $key = "form_{$formId}_confirmation_message";
-            if (isset($translations[$key])) {
-                $settings['confirmation']['messageToShow'] = $translations[$key];
-            }
-        }
-
-        // Restrictions
-        if (isset($settings['restrictions'])) {
-            $restrictions = &$settings['restrictions'];
-
-            // Entry limit message
-            if (isset($restrictions['limitNumberOfEntries']['limitReachedMsg'])) {
-                $key = "form_{$formId}_limit_reached_message";
-                if (isset($translations[$key])) {
-                    $restrictions['limitNumberOfEntries']['limitReachedMsg'] = $translations[$key];
-                }
+            // Check if the string contains shortcodes or HTML
+            $type = 'LINE';
+            if (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false) {
+                $type = 'AREA'; // Use AREA for HTML/shortcodes
             }
 
-            // Schedule messages
-            if (isset($restrictions['scheduleForm'])) {
-                if (isset($restrictions['scheduleForm']['pendingMsg'])) {
-                    $key = "form_{$formId}_pending_message";
-                    if (isset($translations[$key])) {
-                        $restrictions['scheduleForm']['pendingMsg'] = $translations[$key];
-                    }
-                }
-
-                if (isset($restrictions['scheduleForm']['expiredMsg'])) {
-                    $key = "form_{$formId}_expired_message";
-                    if (isset($translations[$key])) {
-                        $restrictions['scheduleForm']['expiredMsg'] = $translations[$key];
-                    }
-                }
-
-                // Selected days
-                if (isset($restrictions['scheduleForm']['selectedDays']) &&
-                    is_array($restrictions['scheduleForm']['selectedDays'])) {
-                    foreach ($restrictions['scheduleForm']['selectedDays'] as $index => &$day) {
-                        $key = "form_{$formId}_schedule_day_{$index}";
-                        if (isset($translations[$key])) {
-                            $day = $translations[$key];
-                        }
-                    }
-                }
-            }
-
-            // Login requirement message
-            if (isset($restrictions['requireLogin']['requireLoginMsg'])) {
-                $key = "form_{$formId}_require_login_message";
-                if (isset($translations[$key])) {
-                    $restrictions['requireLogin']['requireLoginMsg'] = $translations[$key];
-                }
-            }
-
-            // Empty submission message
-            if (isset($restrictions['denyEmptySubmission']['message'])) {
-                $key = "form_{$formId}_empty_submission_message";
-                if (isset($translations[$key])) {
-                    $restrictions['denyEmptySubmission']['message'] = $translations[$key];
-                }
-            }
-
-            // Form restriction messages
-            if (isset($restrictions['restrictForm']['fields'])) {
-                $restrictFields = &$restrictions['restrictForm']['fields'];
-
-                if (isset($restrictFields['ip']['message'])) {
-                    $key = "form_{$formId}_ip_restriction_message";
-                    if (isset($translations[$key])) {
-                        $restrictFields['ip']['message'] = $translations[$key];
-                    }
-                }
-
-                if (isset($restrictFields['country']['message'])) {
-                    $key = "form_{$formId}_country_restriction_message";
-                    if (isset($translations[$key])) {
-                        $restrictFields['country']['message'] = $translations[$key];
-                    }
-                }
-
-                if (isset($restrictFields['keywords']['message'])) {
-                    $key = "form_{$formId}_keyword_restriction_message";
-                    if (isset($translations[$key])) {
-                        $restrictFields['keywords']['message'] = $translations[$key];
-                    }
-                }
-            }
+            do_action('wpml_register_string', $value, $key, $package, $formId, $type);
         }
     }
 
@@ -951,6 +1075,10 @@ class FFWpmlSettingsController
         // Update common fields
         if (isset($translations["{$fieldName}->Label"])) {
             $field['settings']['label'] = $translations["{$fieldName}->Label"];
+        }
+
+        if (!empty($field->settings->admin_label)) {
+            $field['settings']['admin_label'] = $translations["{$fieldName}->admin_field_label"];
         }
 
         if (isset($translations["{$fieldName}->placeholder"])) {
@@ -1207,12 +1335,242 @@ class FFWpmlSettingsController
 
     private function isWpmlEnabledOnForm($formId)
     {
-        return Helper::getFormMeta($formId, 'ff_wpml', false) == true;
+        return $this->isWpmlActive() && Helper::getFormMeta($formId, 'ff_wpml', false) == true;
     }
     
     private function removeWpmlStrings($formId)
     {
         do_action('wpml_delete_package', $formId, 'Fluent Forms');
         Helper::setFormMeta($formId, 'ff_wpml', false);
+    }
+    
+    public function setupLanguageForAjax()
+    {
+        // Check if this is an AJAX request
+        if (!defined('DOING_AJAX') || !DOING_AJAX) {
+            return;
+        }
+
+        // Check if WPML is active
+        if (!$this->isWpmlActive()) {
+            return;
+        }
+
+        // These are the PDF and form-related AJAX actions we want to handle
+        $ajaxActions = [
+            'fluentform_pdf_download',
+            'fluentform_pdf_download_public',
+            'fluentform_pdf_admin_ajax_actions',
+            'fluentform_submit',
+        ];
+
+        $action = isset($_REQUEST['action']) ? sanitize_text_field($_REQUEST['action']) : '';
+
+        if (!in_array($action, $ajaxActions)) {
+            return;
+        }
+
+        // Try to get language from various sources
+        $language = null;
+
+        // Check request parameter first
+        if (isset($_REQUEST['lang'])) {
+            $language = sanitize_text_field($_REQUEST['lang']);
+        }
+        // If no language in request, try WPML cookie
+        elseif (isset($_COOKIE['_icl_current_language'])) {
+            $language = sanitize_text_field($_COOKIE['_icl_current_language']);
+        }
+        // If still no language, try referrer URL for clues
+        elseif (isset($_SERVER['HTTP_REFERER'])) {
+            $referer = $_SERVER['HTTP_REFERER'];
+
+            // Check for directory-based language in referer URL
+            if (preg_match('~^https?://[^/]+/([a-z]{2})(/|$)~i', $referer, $matches)) {
+                $possibleLang = $matches[1];
+
+                // Verify this is a valid WPML language
+                $activeLanguages = apply_filters('wpml_active_languages', []);
+                if (!empty($activeLanguages) && isset($activeLanguages[$possibleLang])) {
+                    $language = $possibleLang;
+                }
+            }
+
+            // Check for query param lang in referer URL
+            if (!$language && preg_match('/[?&]lang=([a-z]{2})/i', $referer, $matches)) {
+                $possibleLang = $matches[1];
+
+                // Verify this is a valid WPML language
+                $activeLanguages = apply_filters('wpml_active_languages', []);
+                if (!empty($activeLanguages) && isset($activeLanguages[$possibleLang])) {
+                    $language = $possibleLang;
+                }
+            }
+        }
+
+        // If we found a language, set it
+        if ($language) {
+            do_action('wpml_switch_language', $language);
+        }
+    }
+
+    public function translateLabelShortcode($inputLabel, $key, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $inputLabel;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        // Try different translation keys in order of priority
+        $translationKeys = [
+            "{$key}->admin_label",
+            "{$key}->Label"
+        ];
+
+        // Try each translation key and use the first one that returns a different value
+        foreach ($translationKeys as $translationKey) {
+            $translated = apply_filters('wpml_translate_string', $inputLabel, $translationKey, $package);
+
+            // If we got a different value back, it means there's a translation available
+            if ($translated !== $inputLabel) {
+                return $translated;
+            }
+        }
+
+        return $inputLabel;
+    }
+    
+    public function translateAllDataShortcode($html, $formFields, $inputLabels, $response)
+    {
+        $formId = $response->form_id;
+
+        // Check if WPML is enabled for this form
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $html;
+        }
+
+        $form = Form::find($formId);
+        if (!$form) {
+            return $html;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        // Translate field labels and values
+        $translatedLabels = [];
+        $translatedValues = [];
+
+        foreach ($inputLabels as $inputKey => $label) {
+            // Try different translation keys in order of priority
+            $translationKeys = [
+                "{$inputKey}->admin_label",
+                "{$inputKey}->Label"
+            ];
+
+            $translatedLabel = $label; // Default to original
+
+            // Try each translation key and use the first one that returns a different value
+            foreach ($translationKeys as $translationKey) {
+                $translated = apply_filters('wpml_translate_string', $label, $translationKey, $package);
+
+                // If we got a different value back, it means there's a translation available
+                if ($translated !== $label) {
+                    $translatedLabel = $translated;
+                    break; // Use the first available translation
+                }
+            }
+
+            $translatedLabels[$inputKey] = $translatedLabel;
+
+            // Translate value if applicable
+            if (array_key_exists($inputKey, $response->user_inputs)) {
+                $value = $response->user_inputs[$inputKey];
+
+                // Only translate select/radio/checkbox option values
+                if (isset($formFields[$inputKey]) &&
+                    in_array($formFields[$inputKey]['element'], ['select', 'radio', 'checkbox']) &&
+                    is_string($value)) {
+
+                    $optionKey = "{$inputKey}->Options->{$value}";
+                    $translatedValue = apply_filters('wpml_translate_string', $value, $optionKey, $package);
+
+                    // Only save if actually different (translated)
+                    if ($translatedValue !== $value) {
+                        $translatedValues[$inputKey] = $translatedValue;
+                    }
+                }
+            }
+        }
+
+        // Rebuild the HTML with translated labels and values
+        $newHtml = '<table class="ff_all_data" width="600" cellpadding="0" cellspacing="0"><tbody>';
+
+        foreach ($inputLabels as $inputKey => $label) {
+            if (array_key_exists($inputKey, $response->user_inputs) && '' !== ArrayHelper::get($response->user_inputs, $inputKey)) {
+                $data = ArrayHelper::get($response->user_inputs, $inputKey);
+
+                // Skip arrays and objects
+                if (is_array($data) || is_object($data)) {
+                    continue;
+                }
+
+                // Use translated value if available
+                if (isset($translatedValues[$inputKey])) {
+                    $data = $translatedValues[$inputKey];
+                }
+
+                // Use translated label
+                $translatedLabel = isset($translatedLabels[$inputKey]) ? $translatedLabels[$inputKey] : $label;
+
+                $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . $translatedLabel . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . $data . '</td></tr>';
+            }
+        }
+
+        $newHtml .= '</tbody></table>';
+
+        return $newHtml;
+    }
+    
+    protected function isWpmlActive()
+    {
+        return defined('ICL_SITEPRESS_VERSION') && defined('WPML_ST_VERSION');
+    }
+
+    public function getCurrentWpmlLanguage()
+    {
+        if (!$this->isWpmlActive()) {
+            return null;
+        }
+
+        return apply_filters('wpml_current_language', null);
+    }
+
+    public function addLanguageToUrl($url)
+    {
+        if (!$this->isWpmlActive()) {
+            return $url;
+        }
+
+        $currentLang = $this->getCurrentWpmlLanguage();
+        if (!$currentLang) {
+            return $url;
+        }
+
+        // Add language parameter
+        return add_query_arg(['lang' => $currentLang], $url);
+    }
+
+    public function handleLanguageForPdf($requestData)
+    {
+        if (!$this->isWpmlActive()) {
+            return;
+        }
+
+        // If language is specified in the request, switch to it
+        if (isset($requestData['lang'])) {
+            $lang = sanitize_text_field($requestData['lang']);
+            do_action('wpml_switch_language', $lang);
+        }
     }
 }
