@@ -257,7 +257,7 @@ class FFWpmlSettingsController
     public static function setRecaptchaLanguage($language)
     {
         $currentLanguage = apply_filters('wpml_current_language', null);
-        $allowed = Helper::locales('captcha');
+        $allowed = static::getLocales('captcha');
 
         if (isset($allowed[$currentLanguage])) {
             $language = $currentLanguage;
@@ -1572,5 +1572,149 @@ class FFWpmlSettingsController
             $lang = sanitize_text_field($requestData['lang']);
             do_action('wpml_switch_language', $lang);
         }
+    }
+
+    public static function getLocales($type = 'date')
+    {
+        $locales = [
+            'en'     => __('English', 'fluentform'),
+            'af'     => __('Afrikaans', 'fluentform'),
+            'sq'     => __('Albanian', 'fluentform'),
+            'ar-DZ'  => __('Algerian Arabic', 'fluentform'),
+            'am'     => __('Amharic', 'fluentform'),
+            'ar'     => __('Arabic', 'fluentform'),
+            'hy'     => __('Armenian', 'fluentform'),
+            'az'     => __('Azerbaijani', 'fluentform'),
+            'eu'     => __('Basque', 'fluentform'),
+            'be'     => __('Belarusian', 'fluentform'),
+            'bn'     => __('Bengali', 'fluentform'),
+            'bs'     => __('Bosnian', 'fluentform'),
+            'bg'     => __('Bulgarian', 'fluentform'),
+            'ca'     => __('Catalan', 'fluentform'),
+            'zh-HK'  => __('Chinese Hong Kong', 'fluentform'),
+            'zh-CN'  => __('Chinese Simplified', 'fluentform'),
+            'zh-TW'  => __('Chinese Traditional', 'fluentform'),
+            'hr'     => __('Croatian', 'fluentform'),
+            'cs'     => __('Czech', 'fluentform'),
+            'da'     => __('Danish', 'fluentform'),
+            'nl'     => __('Dutch', 'fluentform'),
+            'en-GB'  => __('English/UK', 'fluentform'),
+            'eo'     => __('Esperanto', 'fluentform'),
+            'et'     => __('Estonian', 'fluentform'),
+            'fo'     => __('Faroese', 'fluentform'),
+            'fa'     => __('Farsi/Persian', 'fluentform'),
+            'fil'    => __('Filipino', 'fluentform'),
+            'fi'     => __('Finnish', 'fluentform'),
+            'fr'     => __('French', 'fluentform'),
+            'fr-CA'  => __('French/Canadian', 'fluentform'),
+            'fr-CH'  => __('French/Swiss', 'fluentform'),
+            'gl'     => __('Galician', 'fluentform'),
+            'ka'     => __('Georgian', 'fluentform'),
+            'de'     => __('German', 'fluentform'),
+            'de-AT'  => __('German/Austria', 'fluentform'),
+            'de-CH'  => __('German/Switzerland', 'fluentform'),
+            'el'     => __('Greek', 'fluentform'),
+            'gu'     => __('Gujarati', 'fluentform'),
+            'he'     => __('Hebrew', 'fluentform'),
+            'iw'     => __('Hebrew', 'fluentform'),
+            'hi'     => __('Hindi', 'fluentform'),
+            'hu'     => __('Hungarian', 'fluentform'),
+            'is'     => __('Icelandic', 'fluentform'),
+            'id'     => __('Indonesian', 'fluentform'),
+            'it'     => __('Italian', 'fluentform'),
+            'ja'     => __('Japanese', 'fluentform'),
+            'kn'     => __('Kannada', 'fluentform'),
+            'kk'     => __('Kazakh', 'fluentform'),
+            'km'     => __('Khmer', 'fluentform'),
+            'ko'     => __('Korean', 'fluentform'),
+            'ky'     => __('Kyrgyz', 'fluentform'),
+            'lo'     => __('Laothian', 'fluentform'),
+            'lv'     => __('Latvian', 'fluentform'),
+            'lt'     => __('Lithuanian', 'fluentform'),
+            'lb'     => __('Luxembourgish', 'fluentform'),
+            'mk'     => __('Macedonian', 'fluentform'),
+            'ml'     => __('Malayalam', 'fluentform'),
+            'ms'     => __('Malaysian', 'fluentform'),
+            'mr'     => __('Marathi', 'fluentform'),
+            'no'     => __('Norwegian', 'fluentform'),
+            'nb'     => __('Norwegian Bokmål', 'fluentform'),
+            'nn'     => __('Norwegian Nynorsk', 'fluentform'),
+            'pl'     => __('Polish', 'fluentform'),
+            'pt'     => __('Portuguese', 'fluentform'),
+            'pt-BR'  => __('Portuguese/Brazilian', 'fluentform'),
+            'pt-PT'  => __('Portuguese/Portugal', 'fluentform'),
+            'rm'     => __('Romansh', 'fluentform'),
+            'ro'     => __('Romanian', 'fluentform'),
+            'ru'     => __('Russian', 'fluentform'),
+            'sr'     => __('Serbian', 'fluentform'),
+            'sr-SR'  => __('Serbian', 'fluentform'),
+            'si'     => __('Sinhalese', 'fluentform'),
+            'sk'     => __('Slovak', 'fluentform'),
+            'sl'     => __('Slovenian', 'fluentform'),
+            'es'     => __('Spanish', 'fluentform'),
+            'es-419' => __('Spanish/Latin America', 'fluentform'),
+            'sw'     => __('Swahili', 'fluentform'),
+            'sv'     => __('Swedish', 'fluentform'),
+            'ta'     => __('Tamil', 'fluentform'),
+            'te'     => __('Telugu', 'fluentform'),
+            'th'     => __('Thai', 'fluentform'),
+            'tj'     => __('Tajiki', 'fluentform'),
+            'tr'     => __('Turkish', 'fluentform'),
+            'uk'     => __('Ukrainian', 'fluentform'),
+            'ur'     => __('Urdu', 'fluentform'),
+            'vi'     => __('Vietnamese', 'fluentform'),
+            'cy-GB'  => __('Welsh', 'fluentform'),
+            'zu'     => __('Zulu', 'fluentform'),
+        ];
+
+        $unset = [];
+
+        if ($type === 'captcha') {
+            $unset = [
+                'sq',
+                'bs',
+                'eo',
+                'fo',
+                'fr-CH',
+                'sr-SR',
+                'ar-DZ',
+                'be',
+                'cy-GB',
+                'kk',
+                'km',
+                'ky',
+                'lb',
+                'mk',
+                'nb',
+                'nn',
+                'rm',
+                'tj'
+            ];
+        } elseif ($type === 'date') {
+            $unset = [
+                'fil',
+                'fr-CA',
+                'de-AT',
+                'de-CH',
+                'iw',
+                'hi',
+                'pt',
+                'pt-PT',
+                'es-419',
+                'mr',
+                'lo',
+                'kn',
+                'si',
+                'gu',
+                'bn',
+                'zu',
+                'ur',
+                'te',
+                'sw',
+                'am'
+            ];
+        }
+
+        return array_diff_key($locales, array_flip($unset));
     }
 }
