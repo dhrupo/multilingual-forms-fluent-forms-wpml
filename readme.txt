@@ -2,22 +2,27 @@
 Contributors: dhrupo, wpmanageninja
 Tags: Integration, WPML, Form, Integration, Fluent Forms
 Requires at least: 5.0
-Tested up to: 6.5.2
+Tested up to: 6.7.2
 Requires PHP: 7.4
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect Fluent Forms with WooCommerce.
+Seamlessly integrate Fluent Forms with WPML to create multilingual forms for your WordPress website.
 
 == Description ==
-Create WooCommerce Product from your Fluent Forms Form Submission.
-
-== Add-On Fluent Forms ==
-<a href="https://wordpress.org/plugins/fluentform">Fluent Forms</a> is a free and the fastest form builder plugin for WordPress. This Plugin integrates with WooCommerce by providing an option for your users to add product in WooCommerce while submitting a form in WordPress.
+Fluent Forms WPML bridges the gap between Fluent Forms and WPML, allowing you to create fully multilingual forms on your WordPress website without technical hassle.
 
 === FEATURES ===
-- Ability to add WooCommerce Product
+Display form labels, placeholders, and options in the user's preferred language also validation messages appear in the user's preferred language
+
+=== Requirements ===
+This plugin requires the following plugins to be installed and activated:
+
+Fluent Forms Pro 6.0.2 or higher
+WPML Multilingual CMS 4.6 or higher
+WPML String Translation 3.2 or higher
+You must have all three plugins active for this integration to function properly.
 
 == About Fluent Forms ==
 <a href="https://wordpress.org/plugins/fluentform">Fluent Forms</a> is a light-weight and fastest Form Builder plugin.
@@ -53,24 +58,29 @@ Fluent Forms helps you create hassle-free contact forms, subscription forms, or 
 
 
 == Installation ==
-This section describes how to install the plugin (Fluent Forms Connector for WooCommerce) and get it working.
+This section describes how to install the plugin (Fluent Forms WPML) and get it working.
 Install From WordPress Admin Panel:
 
 1. Login to your WordPress Admin Area
 2. Go to Plugins -> Add New
-3. Type "Fluent Forms Connector for WooCommerce" into the Search and hit Enter.
+3. Type "Fluent FormsWPML" into the Search and hit Enter.
 4. Find this plugin Click "install now"
 5. Activate The Plugin
-6. Use WooCommerce on your site form the FluentForms module dashboard.
 
 
 = Manual Installation =
-1. Download the "Fluent Forms Connector for WooCommerce" plugin from WordPress.org repository
+1. Download the "Fluent Forms WPML" plugin from WordPress.org repository
 2. On your WordPress admin dashboard, go to Plugins -> Add New -> Upload Plugin
 3. Upload the downloaded plugin file and click Install Now
-4. Be sure your FluentForms plugin is activated already.
-5. Activate "Fluent Forms Connector for WooCommerce" from your Plugins page.
-6. Use Fluent Forms Connector for WooCommerce on your site form the FluentForms module dashboard.
+4. Ensure Fluent Forms, WPML Multilingual CMS, and WPML String Translation are all installed and properly configured.
+5. Activate "Fluent Forms WPML" from your Plugins page.
+
+== Manual ==
+1. Go to specific Form Settings form Fluent Forms which is needed to be translated
+2. Navigate to WPML Translations from form settings menu sidebar, enable and save it
+3. Go to WPML -> Translations Management and add the form in translations queue
+4. Navigate to WPML -> Translations and translate the form against the selected language
+5. View the form in the selected language
 
 == Screenshots ==
 
@@ -78,5 +88,5 @@ Install From WordPress Admin Panel:
 == Changelog ==
 
 = 1.0.0 =
-* Init Release
+* Initial Release
 
