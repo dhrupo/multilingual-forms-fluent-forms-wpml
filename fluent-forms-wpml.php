@@ -3,10 +3,9 @@
  * Plugin Name: Fluent Forms WPML
  * Plugin URI:  https://github.com/fluentform/fluent-forms-connector-for-mailpoet
  * Description: Add multilingual support for Fluent Forms using WPML.
- * Author: WPManageNinja LLC
- *  Author URI: https://fluentforms.com
- *  Plugin URI: https://wpmanageninja.com/wp-fluent-form/
- * Author URI:  https://github.com/fluentform
+ * Author: Dhrupo
+ * Plugin URI: https://github.com/dhrupo/fluentform-wpml
+ * Author URI: https://github.com/dhrupo/
  * Version: 1.0.0
  * License: GPLv2 or later
  * Text Domain: fluent-forms-wpml

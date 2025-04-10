@@ -1,6 +1,6 @@
 === Fluent Forms WPML  ===
-Contributors: dhrupo, wpmanageninja
-Tags: Integration, WPML, Form, Integration, Fluent Forms
+Contributors: dhrupo, pyrobd
+Tags: WPML, Form,Fluentform, Translate, Fluent Forms
 Requires at least: 5.0
 Tested up to: 6.7.2
 Requires PHP: 7.4
