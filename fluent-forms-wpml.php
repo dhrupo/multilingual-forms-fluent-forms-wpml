@@ -4,7 +4,7 @@
  * Plugin URI:  https://github.com/fluentform/fluent-forms-connector-for-mailpoet
  * Description: Add multilingual support for Fluent Forms using WPML.
  * Author: Dhrupo
- * Plugin URI: https://github.com/dhrupo/fluentform-wpml
+ * Plugin URI: https://github.com/dhrupo/fluent-forms-wpml
  * Author URI: https://github.com/dhrupo/
  * Version: 1.0.0
  * License: GPLv2 or later
