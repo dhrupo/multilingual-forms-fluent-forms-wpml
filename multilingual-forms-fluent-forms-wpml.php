@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Multilingual Forms Fluent Forms WPML
+ * Plugin Name: Multilingual Forms for Fluent Forms with WPML
  * Description: Add multilingual form support for Fluent Forms using WPML.
  * Author: Dhrupo
  * Plugin URI: https://github.com/dhrupo/fluent-forms-wpml
