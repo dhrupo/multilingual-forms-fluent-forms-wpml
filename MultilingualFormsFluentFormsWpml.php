@@ -1,14 +1,13 @@
 <?php
 /**
- * Plugin Name: Fluent Forms WPML
- * Plugin URI:  https://github.com/fluentform/fluent-forms-connector-for-mailpoet
- * Description: Add multilingual support for Fluent Forms using WPML.
+ * Plugin Name: Multilingual Forms Fluent Forms WPML
+ * Description: Add multilingual form support for Fluent Forms using WPML.
  * Author: Dhrupo
  * Plugin URI: https://github.com/dhrupo/fluent-forms-wpml
  * Author URI: https://github.com/dhrupo/
  * Version: 1.0.0
  * License: GPLv2 or later
- * Text Domain: fluent-forms-wpml
+ * Text Domain: multilingual-forms-fluent-forms-wpml
  */
 
 /**
@@ -30,10 +29,10 @@
  */
 
 defined('ABSPATH') || exit;
-define('FFWPML_DIR', plugin_dir_path(__FILE__));
-define('FFWPML_URL', plugins_url('', __FILE__));
+define('MFFFWPML_DIR', plugin_dir_path(__FILE__));
+define('MFFFWPML_URL', plugins_url('', __FILE__));
 
-class FluentFormWpml
+class MultilingualFormsFluentFormsWpml
 {
     private static $activePlugins;
 
@@ -52,13 +51,13 @@ class FluentFormWpml
 
     protected function includeFiles()
     {
-        include_once FFWPML_DIR . 'src/Controllers/FFWpmlSettingsController.php';
+        include_once MFFFWPML_DIR . 'src/Controllers/SettingsController.php';
     }
 
     protected function registerHooks($fluentForm)
     {
         if ($this->isWpmlActive()) {
-            new FluentFormWpml\Controllers\FFWpmlSettingsController($fluentForm);
+            new MultilingualFormsFluentFormsWpml\Controllers\SettingsController($fluentForm);
         }
     }
 
@@ -162,20 +161,10 @@ class FluentFormWpml
     }
 }
 
-register_activation_hook(__FILE__, function() {
-    $globalModules = get_option('fluentform_global_modules_status');
-    if (!$globalModules || !is_array($globalModules)) {
-        $globalModules = [];
-    }
-
-    $globalModules['ff_wpml'] = 'yes';
-    update_option('fluentform_global_modules_status', $globalModules);
-});
-
 add_action('fluentform/loaded', function() {
     if (!function_exists('icl_t')) {
         return;
     }
 
-    (new FluentFormWpml())->boot();
+    (new MultilingualFormsFluentFormsWpml())->boot();
 });

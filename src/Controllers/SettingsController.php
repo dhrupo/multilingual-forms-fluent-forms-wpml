@@ -1,6 +1,6 @@
 <?php
 
-namespace FluentFormWpml\Controllers;
+namespace MultilingualFormsFluentFormsWpml\Controllers;
 
 use FluentForm\App\Helpers\Helper;
 use FluentForm\App\Models\Form;
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-class FFWpmlSettingsController
+class SettingsController
 {
     protected $app;
 
@@ -81,7 +81,7 @@ class FFWpmlSettingsController
 
         if (!$isFFWpmlEnabled) {
             Helper::setFormMeta($formId, 'ff_wpml', false);
-            wp_send_json_success(__('Translation is disabled for this form', 'fluent-forms-wpml'));
+            wp_send_json_success(__('Translation is disabled for this form', 'multilingual-forms-fluent-forms-wpml'));
         }
 
         $form = Form::find($formId);
@@ -146,7 +146,7 @@ class FFWpmlSettingsController
         }
 
         Helper::setFormMeta($formId, 'ff_wpml', $isFFWpmlEnabled);
-        wp_send_json_success(__('Translation is enabled for this form', 'fluent-forms-wpml'));
+        wp_send_json_success(__('Translation is enabled for this form', 'multilingual-forms-fluent-forms-wpml'));
     }
 
     public function handleFormFieldUpdate($formFields, $formId)
@@ -229,14 +229,14 @@ class FFWpmlSettingsController
     public function removeWpmlSettings($formId)
     {
         $this->removeWpmlStrings($formId);
-        wp_send_json_success(__('Translations removed successfully.', 'fluent-forms-wpml'));
+        wp_send_json_success(__('Translations removed successfully.', 'multilingual-forms-fluent-forms-wpml'));
     }
 
     public function pushSettings($settingsMenus, $formId)
     {
         if ($this->isWpmlAndStringTranslationActive()) {
             $settingsMenus['ff_wpml'] = [
-                'title' => __('WPML Translations', 'fluent-forms-wpml'),
+                'title' => __('WPML Translations', 'multilingual-forms-fluent-forms-wpml'),
                 'slug'  => 'ff_wpml',
                 'hash'  => 'ff_wpml',
                 'route' => '/ff-wpml',
@@ -1579,94 +1579,94 @@ class FFWpmlSettingsController
     public static function getLocales($type = 'date')
     {
         $locales = [
-            'en'     => __('English', 'fluent-forms-wpml'),
-            'af'     => __('Afrikaans', 'fluent-forms-wpml'),
-            'sq'     => __('Albanian', 'fluent-forms-wpml'),
-            'ar-DZ'  => __('Algerian Arabic', 'fluent-forms-wpml'),
-            'am'     => __('Amharic', 'fluent-forms-wpml'),
-            'ar'     => __('Arabic', 'fluent-forms-wpml'),
-            'hy'     => __('Armenian', 'fluent-forms-wpml'),
-            'az'     => __('Azerbaijani', 'fluent-forms-wpml'),
-            'eu'     => __('Basque', 'fluent-forms-wpml'),
-            'be'     => __('Belarusian', 'fluent-forms-wpml'),
-            'bn'     => __('Bengali', 'fluent-forms-wpml'),
-            'bs'     => __('Bosnian', 'fluent-forms-wpml'),
-            'bg'     => __('Bulgarian', 'fluent-forms-wpml'),
-            'ca'     => __('Catalan', 'fluent-forms-wpml'),
-            'zh-HK'  => __('Chinese Hong Kong', 'fluent-forms-wpml'),
-            'zh-CN'  => __('Chinese Simplified', 'fluent-forms-wpml'),
-            'zh-TW'  => __('Chinese Traditional', 'fluent-forms-wpml'),
-            'hr'     => __('Croatian', 'fluent-forms-wpml'),
-            'cs'     => __('Czech', 'fluent-forms-wpml'),
-            'da'     => __('Danish', 'fluent-forms-wpml'),
-            'nl'     => __('Dutch', 'fluent-forms-wpml'),
-            'en-GB'  => __('English/UK', 'fluent-forms-wpml'),
-            'eo'     => __('Esperanto', 'fluent-forms-wpml'),
-            'et'     => __('Estonian', 'fluent-forms-wpml'),
-            'fo'     => __('Faroese', 'fluent-forms-wpml'),
-            'fa'     => __('Farsi/Persian', 'fluent-forms-wpml'),
-            'fil'    => __('Filipino', 'fluent-forms-wpml'),
-            'fi'     => __('Finnish', 'fluent-forms-wpml'),
-            'fr'     => __('French', 'fluent-forms-wpml'),
-            'fr-CA'  => __('French/Canadian', 'fluent-forms-wpml'),
-            'fr-CH'  => __('French/Swiss', 'fluent-forms-wpml'),
-            'gl'     => __('Galician', 'fluent-forms-wpml'),
-            'ka'     => __('Georgian', 'fluent-forms-wpml'),
-            'de'     => __('German', 'fluent-forms-wpml'),
-            'de-AT'  => __('German/Austria', 'fluent-forms-wpml'),
-            'de-CH'  => __('German/Switzerland', 'fluent-forms-wpml'),
-            'el'     => __('Greek', 'fluent-forms-wpml'),
-            'gu'     => __('Gujarati', 'fluent-forms-wpml'),
-            'he'     => __('Hebrew', 'fluent-forms-wpml'),
-            'iw'     => __('Hebrew', 'fluent-forms-wpml'),
-            'hi'     => __('Hindi', 'fluent-forms-wpml'),
-            'hu'     => __('Hungarian', 'fluent-forms-wpml'),
-            'is'     => __('Icelandic', 'fluent-forms-wpml'),
-            'id'     => __('Indonesian', 'fluent-forms-wpml'),
-            'it'     => __('Italian', 'fluent-forms-wpml'),
-            'ja'     => __('Japanese', 'fluent-forms-wpml'),
-            'kn'     => __('Kannada', 'fluent-forms-wpml'),
-            'kk'     => __('Kazakh', 'fluent-forms-wpml'),
-            'km'     => __('Khmer', 'fluent-forms-wpml'),
-            'ko'     => __('Korean', 'fluent-forms-wpml'),
-            'ky'     => __('Kyrgyz', 'fluent-forms-wpml'),
-            'lo'     => __('Laothian', 'fluent-forms-wpml'),
-            'lv'     => __('Latvian', 'fluent-forms-wpml'),
-            'lt'     => __('Lithuanian', 'fluent-forms-wpml'),
-            'lb'     => __('Luxembourgish', 'fluent-forms-wpml'),
-            'mk'     => __('Macedonian', 'fluent-forms-wpml'),
-            'ml'     => __('Malayalam', 'fluent-forms-wpml'),
-            'ms'     => __('Malaysian', 'fluent-forms-wpml'),
-            'mr'     => __('Marathi', 'fluent-forms-wpml'),
-            'no'     => __('Norwegian', 'fluent-forms-wpml'),
-            'nb'     => __('Norwegian Bokmål', 'fluent-forms-wpml'),
-            'nn'     => __('Norwegian Nynorsk', 'fluent-forms-wpml'),
-            'pl'     => __('Polish', 'fluent-forms-wpml'),
-            'pt'     => __('Portuguese', 'fluent-forms-wpml'),
-            'pt-BR'  => __('Portuguese/Brazilian', 'fluent-forms-wpml'),
-            'pt-PT'  => __('Portuguese/Portugal', 'fluent-forms-wpml'),
-            'rm'     => __('Romansh', 'fluent-forms-wpml'),
-            'ro'     => __('Romanian', 'fluent-forms-wpml'),
-            'ru'     => __('Russian', 'fluent-forms-wpml'),
-            'sr'     => __('Serbian', 'fluent-forms-wpml'),
-            'sr-SR'  => __('Serbian', 'fluent-forms-wpml'),
-            'si'     => __('Sinhalese', 'fluent-forms-wpml'),
-            'sk'     => __('Slovak', 'fluent-forms-wpml'),
-            'sl'     => __('Slovenian', 'fluent-forms-wpml'),
-            'es'     => __('Spanish', 'fluent-forms-wpml'),
-            'es-419' => __('Spanish/Latin America', 'fluent-forms-wpml'),
-            'sw'     => __('Swahili', 'fluent-forms-wpml'),
-            'sv'     => __('Swedish', 'fluent-forms-wpml'),
-            'ta'     => __('Tamil', 'fluent-forms-wpml'),
-            'te'     => __('Telugu', 'fluent-forms-wpml'),
-            'th'     => __('Thai', 'fluent-forms-wpml'),
-            'tj'     => __('Tajiki', 'fluent-forms-wpml'),
-            'tr'     => __('Turkish', 'fluent-forms-wpml'),
-            'uk'     => __('Ukrainian', 'fluent-forms-wpml'),
-            'ur'     => __('Urdu', 'fluent-forms-wpml'),
-            'vi'     => __('Vietnamese', 'fluent-forms-wpml'),
-            'cy-GB'  => __('Welsh', 'fluent-forms-wpml'),
-            'zu'     => __('Zulu', 'fluent-forms-wpml'),
+            'en'     => __('English', 'multilingual-forms-fluent-forms-wpml'),
+            'af'     => __('Afrikaans', 'multilingual-forms-fluent-forms-wpml'),
+            'sq'     => __('Albanian', 'multilingual-forms-fluent-forms-wpml'),
+            'ar-DZ'  => __('Algerian Arabic', 'multilingual-forms-fluent-forms-wpml'),
+            'am'     => __('Amharic', 'multilingual-forms-fluent-forms-wpml'),
+            'ar'     => __('Arabic', 'multilingual-forms-fluent-forms-wpml'),
+            'hy'     => __('Armenian', 'multilingual-forms-fluent-forms-wpml'),
+            'az'     => __('Azerbaijani', 'multilingual-forms-fluent-forms-wpml'),
+            'eu'     => __('Basque', 'multilingual-forms-fluent-forms-wpml'),
+            'be'     => __('Belarusian', 'multilingual-forms-fluent-forms-wpml'),
+            'bn'     => __('Bengali', 'multilingual-forms-fluent-forms-wpml'),
+            'bs'     => __('Bosnian', 'multilingual-forms-fluent-forms-wpml'),
+            'bg'     => __('Bulgarian', 'multilingual-forms-fluent-forms-wpml'),
+            'ca'     => __('Catalan', 'multilingual-forms-fluent-forms-wpml'),
+            'zh-HK'  => __('Chinese Hong Kong', 'multilingual-forms-fluent-forms-wpml'),
+            'zh-CN'  => __('Chinese Simplified', 'multilingual-forms-fluent-forms-wpml'),
+            'zh-TW'  => __('Chinese Traditional', 'multilingual-forms-fluent-forms-wpml'),
+            'hr'     => __('Croatian', 'multilingual-forms-fluent-forms-wpml'),
+            'cs'     => __('Czech', 'multilingual-forms-fluent-forms-wpml'),
+            'da'     => __('Danish', 'multilingual-forms-fluent-forms-wpml'),
+            'nl'     => __('Dutch', 'multilingual-forms-fluent-forms-wpml'),
+            'en-GB'  => __('English/UK', 'multilingual-forms-fluent-forms-wpml'),
+            'eo'     => __('Esperanto', 'multilingual-forms-fluent-forms-wpml'),
+            'et'     => __('Estonian', 'multilingual-forms-fluent-forms-wpml'),
+            'fo'     => __('Faroese', 'multilingual-forms-fluent-forms-wpml'),
+            'fa'     => __('Farsi/Persian', 'multilingual-forms-fluent-forms-wpml'),
+            'fil'    => __('Filipino', 'multilingual-forms-fluent-forms-wpml'),
+            'fi'     => __('Finnish', 'multilingual-forms-fluent-forms-wpml'),
+            'fr'     => __('French', 'multilingual-forms-fluent-forms-wpml'),
+            'fr-CA'  => __('French/Canadian', 'multilingual-forms-fluent-forms-wpml'),
+            'fr-CH'  => __('French/Swiss', 'multilingual-forms-fluent-forms-wpml'),
+            'gl'     => __('Galician', 'multilingual-forms-fluent-forms-wpml'),
+            'ka'     => __('Georgian', 'multilingual-forms-fluent-forms-wpml'),
+            'de'     => __('German', 'multilingual-forms-fluent-forms-wpml'),
+            'de-AT'  => __('German/Austria', 'multilingual-forms-fluent-forms-wpml'),
+            'de-CH'  => __('German/Switzerland', 'multilingual-forms-fluent-forms-wpml'),
+            'el'     => __('Greek', 'multilingual-forms-fluent-forms-wpml'),
+            'gu'     => __('Gujarati', 'multilingual-forms-fluent-forms-wpml'),
+            'he'     => __('Hebrew', 'multilingual-forms-fluent-forms-wpml'),
+            'iw'     => __('Hebrew', 'multilingual-forms-fluent-forms-wpml'),
+            'hi'     => __('Hindi', 'multilingual-forms-fluent-forms-wpml'),
+            'hu'     => __('Hungarian', 'multilingual-forms-fluent-forms-wpml'),
+            'is'     => __('Icelandic', 'multilingual-forms-fluent-forms-wpml'),
+            'id'     => __('Indonesian', 'multilingual-forms-fluent-forms-wpml'),
+            'it'     => __('Italian', 'multilingual-forms-fluent-forms-wpml'),
+            'ja'     => __('Japanese', 'multilingual-forms-fluent-forms-wpml'),
+            'kn'     => __('Kannada', 'multilingual-forms-fluent-forms-wpml'),
+            'kk'     => __('Kazakh', 'multilingual-forms-fluent-forms-wpml'),
+            'km'     => __('Khmer', 'multilingual-forms-fluent-forms-wpml'),
+            'ko'     => __('Korean', 'multilingual-forms-fluent-forms-wpml'),
+            'ky'     => __('Kyrgyz', 'multilingual-forms-fluent-forms-wpml'),
+            'lo'     => __('Laothian', 'multilingual-forms-fluent-forms-wpml'),
+            'lv'     => __('Latvian', 'multilingual-forms-fluent-forms-wpml'),
+            'lt'     => __('Lithuanian', 'multilingual-forms-fluent-forms-wpml'),
+            'lb'     => __('Luxembourgish', 'multilingual-forms-fluent-forms-wpml'),
+            'mk'     => __('Macedonian', 'multilingual-forms-fluent-forms-wpml'),
+            'ml'     => __('Malayalam', 'multilingual-forms-fluent-forms-wpml'),
+            'ms'     => __('Malaysian', 'multilingual-forms-fluent-forms-wpml'),
+            'mr'     => __('Marathi', 'multilingual-forms-fluent-forms-wpml'),
+            'no'     => __('Norwegian', 'multilingual-forms-fluent-forms-wpml'),
+            'nb'     => __('Norwegian Bokmål', 'multilingual-forms-fluent-forms-wpml'),
+            'nn'     => __('Norwegian Nynorsk', 'multilingual-forms-fluent-forms-wpml'),
+            'pl'     => __('Polish', 'multilingual-forms-fluent-forms-wpml'),
+            'pt'     => __('Portuguese', 'multilingual-forms-fluent-forms-wpml'),
+            'pt-BR'  => __('Portuguese/Brazilian', 'multilingual-forms-fluent-forms-wpml'),
+            'pt-PT'  => __('Portuguese/Portugal', 'multilingual-forms-fluent-forms-wpml'),
+            'rm'     => __('Romansh', 'multilingual-forms-fluent-forms-wpml'),
+            'ro'     => __('Romanian', 'multilingual-forms-fluent-forms-wpml'),
+            'ru'     => __('Russian', 'multilingual-forms-fluent-forms-wpml'),
+            'sr'     => __('Serbian', 'multilingual-forms-fluent-forms-wpml'),
+            'sr-SR'  => __('Serbian', 'multilingual-forms-fluent-forms-wpml'),
+            'si'     => __('Sinhalese', 'multilingual-forms-fluent-forms-wpml'),
+            'sk'     => __('Slovak', 'multilingual-forms-fluent-forms-wpml'),
+            'sl'     => __('Slovenian', 'multilingual-forms-fluent-forms-wpml'),
+            'es'     => __('Spanish', 'multilingual-forms-fluent-forms-wpml'),
+            'es-419' => __('Spanish/Latin America', 'multilingual-forms-fluent-forms-wpml'),
+            'sw'     => __('Swahili', 'multilingual-forms-fluent-forms-wpml'),
+            'sv'     => __('Swedish', 'multilingual-forms-fluent-forms-wpml'),
+            'ta'     => __('Tamil', 'multilingual-forms-fluent-forms-wpml'),
+            'te'     => __('Telugu', 'multilingual-forms-fluent-forms-wpml'),
+            'th'     => __('Thai', 'multilingual-forms-fluent-forms-wpml'),
+            'tj'     => __('Tajiki', 'multilingual-forms-fluent-forms-wpml'),
+            'tr'     => __('Turkish', 'multilingual-forms-fluent-forms-wpml'),
+            'uk'     => __('Ukrainian', 'multilingual-forms-fluent-forms-wpml'),
+            'ur'     => __('Urdu', 'multilingual-forms-fluent-forms-wpml'),
+            'vi'     => __('Vietnamese', 'multilingual-forms-fluent-forms-wpml'),
+            'cy-GB'  => __('Welsh', 'multilingual-forms-fluent-forms-wpml'),
+            'zu'     => __('Zulu', 'multilingual-forms-fluent-forms-wpml'),
         ];
 
         $unset = [];
