@@ -1,4 +1,4 @@
-===  Multilingual Forms Fluent Forms WPML  ===
+===  Multilingual Forms for Fluent Forms with WPML  ===
 Contributors: dhrupo, pyrobd
 Tags: WPML, Form,Fluentform, Translate, Fluent Forms
 Requires at least: 5.0
@@ -11,7 +11,7 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Seamlessly integrate Fluent Forms with WPML to create multilingual forms for your WordPress website.
 
 == Description ==
- Multilingual Forms Fluent Forms WPML bridges the gap between Fluent Forms and WPML, allowing you to create fully multilingual forms on your WordPress website without technical hassle.
+ Multilingual Forms for Fluent Forms with WPML bridges the gap between Fluent Forms and WPML, allowing you to create fully multilingual forms on your WordPress website without technical hassle.
 
 === FEATURES ===
 Display form labels, placeholders, and options in the user's preferred language also validation messages appear in the user's preferred language
