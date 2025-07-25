@@ -28,7 +28,9 @@ class SettingsController
         
         add_filter('fluentform/ajax_url', [$this, 'setAjaxLanguage'], 10, 1);
         add_filter('fluentform/rendering_form', [$this, 'setWpmlForm'], 10, 1);
-        add_filter('fluentform/recaptcha_lang', [$this, 'setRecaptchaLanguage'], 10, 1);
+        add_filter('fluentform/recaptcha_lang', [$this, 'setCaptchaLanguage'], 10, 1);
+        add_filter('fluentform/hcaptcha_lang', [$this, 'setCaptchaLanguage'], 10, 1);
+        add_filter('fluentform/turnstile_lang', [$this, 'setCaptchaLanguage'], 10, 1);
 
         add_filter('fluentform/form_submission_confirmation', [$this, 'translateConfirmationMessage'], 10, 3);
         add_filter('fluentform/entry_limit_reached_message', [$this, 'translateLimitReachedMessage'], 10, 2);
@@ -43,6 +45,87 @@ class SettingsController
         add_filter('fluentform/integration_feed_before_parse', [$this, 'translateFeedValuesBeforeParse'], 10, 4);
 
         add_filter('fluentform/input_label_shortcode', [$this, 'translateLabelShortcode'], 10, 3);
+
+        // Pro Module Translation Filters
+        add_filter('fluentform/payment_confirmation_message', [$this, 'translatePaymentMessage'], 10, 3);
+        add_filter('fluentform/quiz_result_title', [$this, 'translateQuizResultTitle'], 10, 3);
+        add_filter('fluentform/quiz_result_message', [$this, 'translateQuizMessage'], 10, 3);
+        add_filter('fluentform/modal_button_text', [$this, 'translateModalText'], 10, 2);
+        add_filter('fluentform/survey_labels', [$this, 'translateSurveyLabels'], 10, 2);
+        add_filter('fluentform/step_form_navigation_title', [$this, 'translateStepNavigation'], 10, 2);
+        add_filter('fluentform/step_next_button_text', [$this, 'translateStepNextButtonText'], 10, 2);
+        add_filter('fluentform/step_prev_button_text', [$this, 'translateStepPrevButtonText'], 10, 2);
+        add_filter('fluentform/file_upload_messages', [$this, 'translateFileUploadMessages'], 10, 2);
+        add_filter('fluentform/double_optin_messages', [$this, 'translateDoubleOptinMessages'], 10, 3);
+        add_filter('fluentform/admin_approval_messages', [$this, 'translateAdminApprovalMessages'], 10, 3);
+
+        // Shortcode Translation Filters
+        add_filter('fluentform/popup_shortcode_defaults', [$this, 'translatePopupShortcodeDefaults'], 10, 2);
+        add_filter('fluentform/survey_shortcode_defaults', [$this, 'translateSurveyShortcodeDefaults'], 10, 2);
+
+        // Specific Pro Component Filters
+        add_filter('fluentform/save_progress_button_text', [$this, 'translateSaveProgressButtonText'], 10, 2);
+        add_filter('fluentform/survey_field_label', [$this, 'translateSurveyFieldLabel'], 10, 2);
+        add_filter('fluentform/survey_votes_text', [$this, 'translateSurveyVotesText'], 10, 2);
+        add_filter('fluentform/double_optin_confirmation_message', [$this, 'translateDoubleOptinConfirmationMessage'], 10, 3);
+        add_filter('fluentform/file_upload_button_text', [$this, 'translateFileUploadButtonText'], 10, 2);
+
+        // Payment-Specific Hooks (All Payment Methods)
+        add_filter('fluentform/payment_success_title', [$this, 'translatePaymentSuccessTitle'], 10, 3);
+        add_filter('fluentform/payment_failed_title', [$this, 'translatePaymentFailedTitle'], 10, 3);
+        add_filter('fluentform/payment_error_message', [$this, 'translatePaymentErrorMessage'], 10, 3);
+
+        // Pro-only payment hooks
+        add_filter('fluentform/payment_pending_title', [$this, 'translatePaymentPendingTitle'], 10, 3);
+        add_filter('fluentform/payment_pending_message', [$this, 'translatePaymentPendingMessage'], 10, 3);
+
+        // Stripe specific
+        add_filter('fluentform/stripe_payment_redirect_message', [$this, 'translateStripePaymentRedirectMessage'], 10, 3);
+        add_filter('fluentform/stripe_payment_cancelled_message', [$this, 'translateStripePaymentCancelledMessage'], 10, 3);
+
+        // Square specific
+        add_filter('fluentform/square_payment_redirect_message', [$this, 'translateSquarePaymentRedirectMessage'], 10, 3);
+
+        // Paystack specific
+        add_filter('fluentform/paystack_payment_modal_opening_message', [$this, 'translatePaystackPaymentModalOpeningMessage'], 10, 3);
+        add_filter('fluentform/paystack_payment_confirming_message', [$this, 'translatePaystackPaymentConfirmingMessage'], 10, 3);
+        add_filter('fluentform/paystack_payment_verification_error', [$this, 'translatePaystackPaymentVerificationError'], 10, 3);
+
+        // PayPal specific
+        add_filter('fluentform/paypal_payment_processing_message', [$this, 'translatePaypalPaymentProcessingMessage'], 10, 3);
+        add_filter('fluentform/paypal_payment_sandbox_message', [$this, 'translatePaypalPaymentSandboxMessage'], 10, 3);
+        add_filter('fluentform/paypal_payment_cancelled_title', [$this, 'translatePaypalPaymentCancelledTitle'], 10, 3);
+        add_filter('fluentform/paypal_payment_cancelled_message', [$this, 'translatePaypalPaymentCancelledMessage'], 10, 3);
+
+        // Form Validation Message Filters
+        add_filter('fluentform/validations', [$this, 'translateValidationMessages'], 10, 3);
+        add_filter('fluentform/validation_error_message', [$this, 'translateValidationErrorMessage'], 10, 3);
+
+        // Conditional Logic
+        add_filter('fluentform/conditional_content', [$this, 'translateConditionalContent'], 10, 3);
+
+        // Advanced Field Message Filters
+        add_filter('fluentform/calculation_field_messages', [$this, 'translateCalculationFieldMessages'], 10, 2);
+        add_filter('fluentform/inventory_field_messages', [$this, 'translateInventoryFieldMessages'], 10, 2);
+
+        // Email Template Filters
+        add_filter('fluentform/email_header', [$this, 'translateEmailTemplateHeader'], 10, 3);
+        add_filter('fluentform/email_footer', [$this, 'translateEmailTemplateFooter'], 10, 3);
+        add_filter('fluentform/email_subject', [$this, 'translateEmailSubjectLine'], 10, 3);
+
+        // Subscription/Recurring Payment Filters
+        add_filter('fluentform/subscription_confirmation_message', [$this, 'translateSubscriptionMessage'], 10, 3);
+        add_filter('fluentform/recurring_payment_message', [$this, 'translateRecurringPaymentMessage'], 10, 3);
+
+        // Submission Message Parse Filter
+        add_filter('fluentform/submission_message_parse', [$this, 'translateSubmissionMessageParse'], 10, 4);
+
+        // JavaScript Frontend Message Filters
+        add_filter('fluentform/form_submission_messages', [$this, 'translateFormSubmissionMessages'], 10, 2);
+        add_filter('fluentform/payment_handler_messages', [$this, 'translatePaymentHandlerMessages'], 10, 2);
+        add_filter('fluentform/form_save_progress_messages', [$this, 'translateFormSaveProgressMessages'], 10, 2);
+        add_filter('fluentform/address_autocomplete_messages', [$this, 'translateAddressAutocompleteMessages'], 10, 2);
+        add_filter('fluentform/payment_gateway_messages', [$this, 'translatePaymentGatewayMessages'], 10, 2);
 
         add_filter('fluentform/all_data_shortcode_html', [$this, 'translateAllDataShortcode'],10, 4);
 
@@ -254,13 +337,32 @@ class SettingsController
         return $wpmlActive && $wpmlStringActive;
     }
 
-    public static function setRecaptchaLanguage($language)
+    public static function setCaptchaLanguage($language)
     {
         $currentLanguage = apply_filters('wpml_current_language', null);
-        $allowed = static::getLocales('captcha');
 
-        if (isset($allowed[$currentLanguage])) {
-            $language = $currentLanguage;
+        if (!$currentLanguage) {
+            return $language;
+        }
+
+        // Get the current filter being applied to determine CAPTCHA type
+        $currentFilter = current_filter();
+
+        if ($currentFilter === 'fluentform/recaptcha_lang') {
+            $allowed = static::getRecaptchaLocales();
+            if (isset($allowed[$currentLanguage])) {
+                $language = $allowed[$currentLanguage];
+            }
+        } elseif ($currentFilter === 'fluentform/hcaptcha_lang') {
+            $allowed = static::getHcaptchaLocales();
+            if (isset($allowed[$currentLanguage])) {
+                $language = $allowed[$currentLanguage];
+            }
+        } elseif ($currentFilter === 'fluentform/turnstile_lang') {
+            $allowed = static::getTurnstileLocales();
+            if (isset($allowed[$currentLanguage])) {
+                $language = $allowed[$currentLanguage];
+            }
         }
 
         return $language;
@@ -345,8 +447,19 @@ class SettingsController
 
         $package = $this->getFormPackage($form);
 
-        $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], "form_{$form->id}_confirmation_message", $package);
-        
+        // Translate main confirmation message
+        if (!empty($confirmation['messageToShow'])) {
+            $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], "form_{$form->id}_confirmation_message", $package);
+        }
+
+        // Translate success page title if present
+        if (!empty($confirmation['samePageFormBehavior']) && !empty($confirmation['messageToShow'])) {
+            // This is already handled above, but we can add specific handling for different behavior types
+            if (isset($confirmation['successPageTitle'])) {
+                $confirmation['successPageTitle'] = apply_filters('wpml_translate_string', $confirmation['successPageTitle'], "form_{$form->id}_confirmation_page_title", $package);
+            }
+        }
+
         return $confirmation;
     }
     
@@ -437,6 +550,563 @@ class SettingsController
 
         return apply_filters('wpml_translate_string', $message, "form_{$form->id}_keyword_restriction_message", $package);
     }
+
+    public function translatePaymentMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_payment_message", $package);
+    }
+
+    public function translateQuizMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_quiz_message", $package);
+    }
+
+    public function translateModalText($text, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_modal_text", $package);
+    }
+
+    public function translateSurveyLabels($labels, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $labels;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        if (is_array($labels)) {
+            foreach ($labels as $key => $label) {
+                $labels[$key] = apply_filters('wpml_translate_string', $label, "form_{$form->id}_survey_label_{$key}", $package);
+            }
+        } else {
+            $labels = apply_filters('wpml_translate_string', $labels, "form_{$form->id}_survey_labels", $package);
+        }
+
+        return $labels;
+    }
+
+    public function translateStepNavigation($navigation, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $navigation;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        if (isset($navigation['next_btn_text'])) {
+            $navigation['next_btn_text'] = apply_filters('wpml_translate_string', $navigation['next_btn_text'], "form_{$form->id}_step_next_btn", $package);
+        }
+
+        if (isset($navigation['prev_btn_text'])) {
+            $navigation['prev_btn_text'] = apply_filters('wpml_translate_string', $navigation['prev_btn_text'], "form_{$form->id}_step_prev_btn", $package);
+        }
+
+        if (isset($navigation['step_title'])) {
+            $navigation['step_title'] = apply_filters('wpml_translate_string', $navigation['step_title'], "form_{$form->id}_step_title", $package);
+        }
+
+        return $navigation;
+    }
+
+    public function translateFileUploadMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'drag_drop_text' => 'file_drag_drop_text',
+            'upload_text' => 'file_upload_text',
+            'max_file_error' => 'file_max_error',
+            'file_type_error' => 'file_type_error',
+            'file_size_error' => 'file_size_error',
+            'upload_failed_text' => 'file_upload_failed_text',
+            'upload_error_text' => 'file_upload_error_text'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateDoubleOptinMessages($messages, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'confirmation_message' => 'optin_confirmation_message',
+            'email_subject' => 'optin_email_subject',
+            'email_body' => 'optin_email_body',
+            'success_message' => 'optin_success_message',
+            'error_message' => 'optin_error_message'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateAdminApprovalMessages($messages, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'approval_message' => 'approval_pending_message',
+            'approved_message' => 'approval_approved_message',
+            'rejected_message' => 'approval_rejected_message',
+            'notification_subject' => 'approval_notification_subject',
+            'notification_body' => 'approval_notification_body'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translatePopupShortcodeDefaults($defaults, $atts)
+    {
+        if (!isset($atts['form_id'])) {
+            return $defaults;
+        }
+
+        $formId = intval($atts['form_id']);
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $defaults;
+        }
+
+        $form = (object)['id' => $formId];
+        $package = $this->getFormPackage($form);
+
+        // Translate default button text
+        if (isset($defaults['btn_text'])) {
+            $defaults['btn_text'] = apply_filters('wpml_translate_string', $defaults['btn_text'], "form_{$formId}_modal_button_text", $package);
+        }
+
+        return $defaults;
+    }
+
+    public function translateSurveyShortcodeDefaults($defaults, $atts)
+    {
+        if (!isset($atts['form_id'])) {
+            return $defaults;
+        }
+
+        $formId = intval($atts['form_id']);
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $defaults;
+        }
+
+        $form = (object)['id' => $formId];
+        $package = $this->getFormPackage($form);
+
+        // Translate default labels
+        $translatableKeys = ['label', 'counts'];
+        foreach ($translatableKeys as $key) {
+            if (isset($defaults[$key])) {
+                $defaults[$key] = apply_filters('wpml_translate_string', $defaults[$key], "form_{$formId}_survey_{$key}_default", $package);
+            }
+        }
+
+        return $defaults;
+    }
+
+    public function translateSaveProgressButtonText($text, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_save_progress_button_text", $package);
+    }
+
+    public function translateSurveyFieldLabel($label, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $label;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $label, "form_{$form->id}_survey_field_label", $package);
+    }
+
+    public function translateSurveyVotesText($text, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_survey_votes_text", $package);
+    }
+
+    public function translateDoubleOptinConfirmationMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_double_optin_confirmation", $package);
+    }
+
+    public function translateFileUploadButtonText($text, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_file_upload_button_text", $package);
+    }
+
+    public function translatePaymentSuccessTitle($title, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $title;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $title, "form_{$form->id}_payment_success_title", $package);
+    }
+
+    public function translatePaymentFailedTitle($title, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $title;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $title, "form_{$form->id}_payment_failed_title", $package);
+    }
+
+    public function translatePaymentPendingTitle($title, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $title;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $title, "form_{$form->id}_payment_pending_title", $package);
+    }
+
+    public function translatePaymentPendingMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_payment_pending_message", $package);
+    }
+
+    public function translatePaymentErrorMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_payment_error_message", $package);
+    }
+
+    public function translateStripePaymentRedirectMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_stripe_payment_redirect_message", $package);
+    }
+
+    public function translateSquarePaymentRedirectMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_square_payment_redirect_message", $package);
+    }
+
+    public function translatePaystackPaymentModalOpeningMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paystack_payment_modal_opening_message", $package);
+    }
+
+    public function translatePaystackPaymentConfirmingMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paystack_payment_confirming_message", $package);
+    }
+
+    public function translatePaystackPaymentVerificationError($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paystack_payment_verification_error", $package);
+    }
+
+    public function translateQuizResultTitle($title, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $title;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $title, "form_{$form->id}_quiz_result_title", $package);
+    }
+
+    public function translateStepNextButtonText($text, $data)
+    {
+        if (!isset($data['container']['form_instance'])) {
+            return $text;
+        }
+
+        $form = $data['container']['form_instance'];
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_step_next_button_text", $package);
+    }
+
+    public function translateStepPrevButtonText($text, $data)
+    {
+        if (!isset($data['container']['form_instance'])) {
+            return $text;
+        }
+
+        $form = $data['container']['form_instance'];
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $text;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $text, "form_{$form->id}_step_prev_button_text", $package);
+    }
+
+    public function translateStripePaymentCancelledMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_stripe_payment_cancelled_message", $package);
+    }
+
+    public function translatePaypalPaymentProcessingMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paypal_payment_processing_message", $package);
+    }
+
+    public function translatePaypalPaymentSandboxMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paypal_payment_sandbox_message", $package);
+    }
+
+    public function translatePaypalPaymentCancelledTitle($title, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $title;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $title, "form_{$form->id}_paypal_payment_cancelled_title", $package);
+    }
+
+    public function translatePaypalPaymentCancelledMessage($message, $submission, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_paypal_payment_cancelled_message", $package);
+    }
+
+    public function translateValidationMessages($validations, $form, $formData)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $validations;
+        }
+
+        $package = $this->getFormPackage($form);
+        list($rules, $messages) = $validations;
+
+        // Translate validation messages
+        foreach ($messages as $key => $message) {
+            $translationKey = "form_{$form->id}_validation_" . str_replace('.', '_', $key);
+            $messages[$key] = apply_filters('wpml_translate_string', $message, $translationKey, $package);
+        }
+
+        return [$rules, $messages];
+    }
+
+    public function translateValidationErrorMessage($message, $field, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_validation_error_message", $package);
+    }
+
+    public function translateConditionalContent($content, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $content;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $content, "form_{$form->id}_conditional_content", $package);
+    }
+
+    public function translateStepValidationMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_step_validation_message", $package);
+    }
+
+    public function translateRepeaterFieldMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'add_more_text' => 'repeater_add_more_text',
+            'remove_text' => 'repeater_remove_text',
+            'max_repeat_error' => 'repeater_max_repeat_error',
+            'min_repeat_error' => 'repeater_min_repeat_error'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateCalculationFieldMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'calculation_error' => 'calculation_error_message',
+            'invalid_formula' => 'calculation_invalid_formula',
+            'division_by_zero' => 'calculation_division_by_zero'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateInventoryFieldMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'out_of_stock' => 'inventory_out_of_stock',
+            'insufficient_stock' => 'inventory_insufficient_stock',
+            'stock_limit_reached' => 'inventory_stock_limit_reached'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
     
     public function translateFeedValuesBeforeParse(&$feed, $insertId, $formData, $form)
     {
@@ -473,7 +1143,69 @@ class SettingsController
                 $feed['settings']['footer'] = apply_filters('wpml_translate_string', $feed['settings']['footer'], $key, $package);
             }
         }
-        
+
+        // Pro Integration Feeds (ActiveCampaign, Zapier, etc.)
+        $proIntegrations = [
+            'activecampaign', 'campaignmonitor', 'constantcontact', 'convertkit', 'getresponse',
+            'hubspot', 'icontact', 'moosend', 'platformly', 'webhook', 'zapier', 'sendfox',
+            'mailerlite', 'sms_notification', 'getgist', 'googlesheet', 'trello', 'drip',
+            'sendinblue', 'user_registration', 'automizy', 'telegram', 'salesflare', 'discord',
+            'cleverreach', 'clicksend', 'zohocrm', 'pipedrive', 'salesforce', 'amocrm',
+            'onepagecrm', 'airtable', 'mailjet', 'insightly', 'mailster', 'notion'
+        ];
+
+        $metaKey = ArrayHelper::get($feed, 'meta_key');
+        if (in_array($metaKey, $proIntegrations)) {
+            // Common translatable integration settings
+            $translatableKeys = [
+                'success_message' => 'integration_success_message',
+                'error_message' => 'integration_error_message',
+                'confirmation_message' => 'integration_confirmation_message',
+                'email_subject' => 'integration_email_subject',
+                'email_body' => 'integration_email_body',
+                'webhook_success_message' => 'webhook_success_message',
+                'webhook_error_message' => 'webhook_error_message',
+                'list_name' => 'integration_list_name',
+                'tag_name' => 'integration_tag_name',
+                'note' => 'integration_note',
+                'description' => 'integration_description'
+            ];
+
+            foreach ($translatableKeys as $settingKey => $translationKey) {
+                if (isset($feed['settings'][$settingKey])) {
+                    $key = "form_{$formId}_feed_{$id}_{$translationKey}";
+                    $feed['settings'][$settingKey] = apply_filters('wpml_translate_string', $feed['settings'][$settingKey], $key, $package);
+                }
+            }
+
+            // Handle nested settings for complex integrations
+            if (isset($feed['settings']['fields']) && is_array($feed['settings']['fields'])) {
+                foreach ($feed['settings']['fields'] as $fieldKey => &$fieldValue) {
+                    if (is_string($fieldValue) && !empty($fieldValue)) {
+                        $key = "form_{$formId}_feed_{$id}_field_{$fieldKey}";
+                        $fieldValue = apply_filters('wpml_translate_string', $fieldValue, $key, $package);
+                    }
+                }
+            }
+        }
+
+        // Payment Integration Messages
+        if (strpos($metaKey, 'payment_') === 0 || in_array($metaKey, ['paypal', 'stripe', 'razorpay', 'mollie', 'paystack'])) {
+            $paymentKeys = [
+                'payment_success_message' => 'payment_success_message',
+                'payment_error_message' => 'payment_error_message',
+                'receipt_template' => 'payment_receipt_template',
+                'confirmation_message' => 'payment_confirmation_message'
+            ];
+
+            foreach ($paymentKeys as $settingKey => $translationKey) {
+                if (isset($feed['settings'][$settingKey])) {
+                    $key = "form_{$formId}_payment_{$id}_{$translationKey}";
+                    $feed['settings'][$settingKey] = apply_filters('wpml_translate_string', $feed['settings'][$settingKey], $key, $package);
+                }
+            }
+        }
+
         return $feed;
     }
 
@@ -559,11 +1291,42 @@ class SettingsController
             $fields["{$fieldIdentifier}->btn_text"] = $field->settings->btn_text;
         }
 
+        if (!empty($field->settings->prefix_label)) {
+            $fields["{$fieldIdentifier}->prefix_label"] = $field->settings->prefix_label;
+        }
+
+        if (!empty($field->settings->suffix_label)) {
+            $fields["{$fieldIdentifier}->suffix_label"] = $field->settings->suffix_label;
+        }
+
         // Handle validation messages
         if (!empty($field->settings->validation_rules)) {
             foreach ($field->settings->validation_rules as $rule => $details) {
                 if (!empty($details->message)) {
                     $fields["{$fieldIdentifier}->Validation Rules->{$rule}"] = $details->message;
+                }
+            }
+        }
+
+        // Handle unique validation message
+        if (!empty($field->settings->unique_validation_message)) {
+            $fields["{$fieldIdentifier}->unique_validation_message"] = $field->settings->unique_validation_message;
+        }
+
+        // Handle inventory/stock messages
+        if (!empty($field->settings->inventory_stockout_message)) {
+            $fields["{$fieldIdentifier}->inventory_stockout_message"] = $field->settings->inventory_stockout_message;
+        }
+
+        if (!empty($field->settings->stock_quantity_label)) {
+            $fields["{$fieldIdentifier}->stock_quantity_label"] = $field->settings->stock_quantity_label;
+        }
+
+        // Handle conditional logic group titles
+        if (!empty($field->settings->conditional_logics->condition_groups)) {
+            foreach ($field->settings->conditional_logics->condition_groups as $groupIndex => $group) {
+                if (!empty($group->title)) {
+                    $fields["{$fieldIdentifier}->conditional_logics->condition_groups->{$groupIndex}->title"] = $group->title;
                 }
             }
         }
@@ -819,6 +1582,77 @@ class SettingsController
                     $fields["{$fieldIdentifier}->prev_btn->text"] = $field->settings->prev_btn->text;
                 }
                 break;
+
+            case 'save_progress_button':
+                // Extract save progress button messages and email templates
+                if (!empty($field->settings->save_success_message)) {
+                    $fields["{$fieldIdentifier}->save_success_message"] = $field->settings->save_success_message;
+                }
+
+                if (!empty($field->settings->email_subject)) {
+                    $fields["{$fieldIdentifier}->email_subject"] = $field->settings->email_subject;
+                }
+
+                if (!empty($field->settings->email_body)) {
+                    $fields["{$fieldIdentifier}->email_body"] = $field->settings->email_body;
+                }
+
+                if (!empty($field->settings->on_create_email_subject)) {
+                    $fields["{$fieldIdentifier}->on_create_email_subject"] = $field->settings->on_create_email_subject;
+                }
+
+                if (!empty($field->settings->on_create_email_body)) {
+                    $fields["{$fieldIdentifier}->on_create_email_body"] = $field->settings->on_create_email_body;
+                }
+
+                if (!empty($field->settings->on_update_email_subject)) {
+                    $fields["{$fieldIdentifier}->on_update_email_subject"] = $field->settings->on_update_email_subject;
+                }
+
+                if (!empty($field->settings->on_update_email_body)) {
+                    $fields["{$fieldIdentifier}->on_update_email_body"] = $field->settings->on_update_email_body;
+                }
+                break;
+
+            case 'ratings':
+                // Extract rating options labels
+                if (!empty($field->options)) {
+                    foreach ($field->options as $value => $label) {
+                        if (!empty($label)) {
+                            $fields["{$fieldIdentifier}->Rating Options->{$value}"] = $label;
+                        }
+                    }
+                }
+                break;
+
+            case 'select_country':
+                // Extract country options labels
+                if (!empty($field->options)) {
+                    foreach ($field->options as $value => $label) {
+                        if (!empty($label)) {
+                            $fields["{$fieldIdentifier}->Country Options->{$value}"] = $label;
+                        }
+                    }
+                }
+                break;
+
+            case 'chained_select':
+                // Extract chained select data source headers
+                if (!empty($field->settings->data_source->headers)) {
+                    foreach ($field->settings->data_source->headers as $index => $header) {
+                        if (!empty($header)) {
+                            $fields["{$fieldIdentifier}->data_source->headers->{$index}"] = $header;
+                        }
+                    }
+                }
+                break;
+
+            case 'recaptcha':
+            case 'hcaptcha':
+            case 'turnstile':
+                // These CAPTCHA fields only have labels that are handled by common field processing
+                // No additional field-specific translatable content
+                break;
         }
     }
 
@@ -828,8 +1662,25 @@ class SettingsController
         $extractedStrings = [];
 
         // Confirmation settings
-        if (isset($settings['formSettings'][0]['confirmation']['messageToShow'])) {
-            $extractedStrings["form_{$formId}_confirmation_message"] = $settings['formSettings'][0]['confirmation']['messageToShow'];
+        if (isset($settings['formSettings'][0]['confirmation'])) {
+            $confirmation = $settings['formSettings'][0]['confirmation'];
+
+            // Main confirmation message
+            if (isset($confirmation['messageToShow'])) {
+                $extractedStrings["form_{$formId}_confirmation_message"] = $confirmation['messageToShow'];
+            }
+
+
+
+            // Custom page HTML content
+            if (isset($confirmation['customPageHtml'])) {
+                $extractedStrings["form_{$formId}_confirmation_custom_page"] = $confirmation['customPageHtml'];
+            }
+
+            // Success page title
+            if (isset($confirmation['successPageTitle'])) {
+                $extractedStrings["form_{$formId}_confirmation_page_title"] = $confirmation['successPageTitle'];
+            }
         }
 
         // Restriction messages
@@ -916,6 +1767,107 @@ class SettingsController
                 if (isset($validationSettings['error_message'])) {
                     $extractedStrings["form_{$formId}_advanced_validation_error"] = $validationSettings['error_message'];
                     break; // Only process the first one
+                }
+            }
+        }
+
+        // Payment Settings
+        if (isset($settings['payment_settings'])) {
+            foreach ($settings['payment_settings'] as $index => $paymentSettings) {
+                if (isset($paymentSettings['confirmation_message'])) {
+                    $extractedStrings["form_{$formId}_payment_confirmation_{$index}"] = $paymentSettings['confirmation_message'];
+                }
+                if (isset($paymentSettings['error_message'])) {
+                    $extractedStrings["form_{$formId}_payment_error_{$index}"] = $paymentSettings['error_message'];
+                }
+                if (isset($paymentSettings['receipt_template'])) {
+                    $extractedStrings["form_{$formId}_payment_receipt_{$index}"] = $paymentSettings['receipt_template'];
+                }
+            }
+        }
+
+        // Quiz Settings
+        if (isset($settings['quiz_settings'])) {
+            foreach ($settings['quiz_settings'] as $index => $quizSettings) {
+                if (isset($quizSettings['result_message'])) {
+                    $extractedStrings["form_{$formId}_quiz_result_{$index}"] = $quizSettings['result_message'];
+                }
+                if (isset($quizSettings['pass_message'])) {
+                    $extractedStrings["form_{$formId}_quiz_pass_{$index}"] = $quizSettings['pass_message'];
+                }
+                if (isset($quizSettings['fail_message'])) {
+                    $extractedStrings["form_{$formId}_quiz_fail_{$index}"] = $quizSettings['fail_message'];
+                }
+            }
+        }
+
+        // Modal Settings
+        if (isset($settings['modal_settings'])) {
+            if (isset($settings['modal_settings']['button_text'])) {
+                $extractedStrings["form_{$formId}_modal_button_text"] = $settings['modal_settings']['button_text'];
+            }
+            if (isset($settings['modal_settings']['modal_title'])) {
+                $extractedStrings["form_{$formId}_modal_title"] = $settings['modal_settings']['modal_title'];
+            }
+        }
+
+        // Step Form Settings
+        if (isset($settings['step_form_settings'])) {
+            if (isset($settings['step_form_settings']['next_btn_text'])) {
+                $extractedStrings["form_{$formId}_step_next_btn"] = $settings['step_form_settings']['next_btn_text'];
+            }
+            if (isset($settings['step_form_settings']['prev_btn_text'])) {
+                $extractedStrings["form_{$formId}_step_prev_btn"] = $settings['step_form_settings']['prev_btn_text'];
+            }
+        }
+
+        // File Upload Settings
+        if (isset($settings['file_upload_settings'])) {
+            $fileUploadKeys = [
+                'drag_drop_text' => 'file_drag_drop_text',
+                'upload_text' => 'file_upload_text',
+                'max_file_error' => 'file_max_error',
+                'file_type_error' => 'file_type_error',
+                'file_size_error' => 'file_size_error'
+            ];
+
+            foreach ($fileUploadKeys as $key => $translationKey) {
+                if (isset($settings['file_upload_settings'][$key])) {
+                    $extractedStrings["form_{$formId}_{$translationKey}"] = $settings['file_upload_settings'][$key];
+                }
+            }
+        }
+
+        // Pro Integration Feeds
+        $proIntegrations = [
+            'activecampaign', 'campaignmonitor', 'constantcontact', 'convertkit', 'getresponse',
+            'hubspot', 'icontact', 'moosend', 'platformly', 'webhook', 'zapier', 'sendfox',
+            'mailerlite', 'sms_notification', 'getgist', 'googlesheet', 'trello', 'drip',
+            'sendinblue', 'user_registration', 'automizy', 'telegram', 'salesflare', 'discord',
+            'cleverreach', 'clicksend', 'zohocrm', 'pipedrive', 'salesforce', 'amocrm',
+            'onepagecrm', 'airtable', 'mailjet', 'insightly', 'mailster', 'notion'
+        ];
+
+        foreach ($proIntegrations as $integration) {
+            if (isset($settings[$integration])) {
+                foreach ($settings[$integration] as $index => $feed) {
+                    $translatableKeys = [
+                        'success_message' => 'integration_success_message',
+                        'error_message' => 'integration_error_message',
+                        'confirmation_message' => 'integration_confirmation_message',
+                        'email_subject' => 'integration_email_subject',
+                        'email_body' => 'integration_email_body',
+                        'list_name' => 'integration_list_name',
+                        'tag_name' => 'integration_tag_name',
+                        'note' => 'integration_note',
+                        'description' => 'integration_description'
+                    ];
+
+                    foreach ($translatableKeys as $settingKey => $translationKey) {
+                        if (isset($feed['settings'][$settingKey])) {
+                            $extractedStrings["form_{$formId}_feed_{$index}_{$translationKey}"] = $feed['settings'][$settingKey];
+                        }
+                    }
                 }
             }
         }
@@ -1098,12 +2050,44 @@ class SettingsController
             $field['settings']['btn_text'] = $translations["{$fieldName}->btn_text"];
         }
 
+        if (isset($translations["{$fieldName}->prefix_label"])) {
+            $field['settings']['prefix_label'] = $translations["{$fieldName}->prefix_label"];
+        }
+
+        if (isset($translations["{$fieldName}->suffix_label"])) {
+            $field['settings']['suffix_label'] = $translations["{$fieldName}->suffix_label"];
+        }
+
         // Update validation messages
         if (isset($field['settings']['validation_rules'])) {
             foreach ($field['settings']['validation_rules'] as $rule => &$details) {
                 $key = "{$fieldName}->Validation Rules->{$rule}";
                 if (isset($translations[$key])) {
                     $details['message'] = $translations[$key];
+                }
+            }
+        }
+
+        // Update unique validation message
+        if (isset($translations["{$fieldName}->unique_validation_message"])) {
+            $field['settings']['unique_validation_message'] = $translations["{$fieldName}->unique_validation_message"];
+        }
+
+        // Update inventory/stock messages
+        if (isset($translations["{$fieldName}->inventory_stockout_message"])) {
+            $field['settings']['inventory_stockout_message'] = $translations["{$fieldName}->inventory_stockout_message"];
+        }
+
+        if (isset($translations["{$fieldName}->stock_quantity_label"])) {
+            $field['settings']['stock_quantity_label'] = $translations["{$fieldName}->stock_quantity_label"];
+        }
+
+        // Update conditional logic group titles
+        if (isset($field['settings']['conditional_logics']['condition_groups'])) {
+            foreach ($field['settings']['conditional_logics']['condition_groups'] as $groupIndex => &$group) {
+                $key = "{$fieldName}->conditional_logics->condition_groups->{$groupIndex}->title";
+                if (isset($translations[$key])) {
+                    $group['title'] = $translations[$key];
                 }
             }
         }
@@ -1329,6 +2313,87 @@ class SettingsController
                         $field['settings']['prev_btn']['text'] = $translations[$prevBtnTextKey];
                     }
                 }
+                break;
+
+            case 'save_progress_button':
+                // Update save progress button messages and email templates
+                $saveSuccessKey = "{$fieldName}->save_success_message";
+                if (isset($translations[$saveSuccessKey])) {
+                    $field['settings']['save_success_message'] = $translations[$saveSuccessKey];
+                }
+
+                $emailSubjectKey = "{$fieldName}->email_subject";
+                if (isset($translations[$emailSubjectKey])) {
+                    $field['settings']['email_subject'] = $translations[$emailSubjectKey];
+                }
+
+                $emailBodyKey = "{$fieldName}->email_body";
+                if (isset($translations[$emailBodyKey])) {
+                    $field['settings']['email_body'] = $translations[$emailBodyKey];
+                }
+
+                $onCreateSubjectKey = "{$fieldName}->on_create_email_subject";
+                if (isset($translations[$onCreateSubjectKey])) {
+                    $field['settings']['on_create_email_subject'] = $translations[$onCreateSubjectKey];
+                }
+
+                $onCreateBodyKey = "{$fieldName}->on_create_email_body";
+                if (isset($translations[$onCreateBodyKey])) {
+                    $field['settings']['on_create_email_body'] = $translations[$onCreateBodyKey];
+                }
+
+                $onUpdateSubjectKey = "{$fieldName}->on_update_email_subject";
+                if (isset($translations[$onUpdateSubjectKey])) {
+                    $field['settings']['on_update_email_subject'] = $translations[$onUpdateSubjectKey];
+                }
+
+                $onUpdateBodyKey = "{$fieldName}->on_update_email_body";
+                if (isset($translations[$onUpdateBodyKey])) {
+                    $field['settings']['on_update_email_body'] = $translations[$onUpdateBodyKey];
+                }
+                break;
+
+            case 'ratings':
+                // Update rating options labels
+                if (isset($field['options']) && is_array($field['options'])) {
+                    foreach ($field['options'] as $value => $label) {
+                        $ratingKey = "{$fieldName}->Rating Options->{$value}";
+                        if (isset($translations[$ratingKey])) {
+                            $field['options'][$value] = $translations[$ratingKey];
+                        }
+                    }
+                }
+                break;
+
+            case 'select_country':
+                // Update country options labels
+                if (isset($field['options']) && is_array($field['options'])) {
+                    foreach ($field['options'] as $value => $label) {
+                        $countryKey = "{$fieldName}->Country Options->{$value}";
+                        if (isset($translations[$countryKey])) {
+                            $field['options'][$value] = $translations[$countryKey];
+                        }
+                    }
+                }
+                break;
+
+            case 'chained_select':
+                // Update chained select data source headers
+                if (isset($field['settings']['data_source']['headers']) && is_array($field['settings']['data_source']['headers'])) {
+                    foreach ($field['settings']['data_source']['headers'] as $index => $header) {
+                        $headerKey = "{$fieldName}->data_source->headers->{$index}";
+                        if (isset($translations[$headerKey])) {
+                            $field['settings']['data_source']['headers'][$index] = $translations[$headerKey];
+                        }
+                    }
+                }
+                break;
+
+            case 'recaptcha':
+            case 'hcaptcha':
+            case 'turnstile':
+                // These CAPTCHA fields only have labels that are handled by common field processing
+                // No additional field-specific translatable content to update
                 break;
         }
     }
@@ -1576,147 +2641,385 @@ class SettingsController
         }
     }
 
-    public static function getLocales($type = 'date')
+
+    /**
+     * Get supported reCAPTCHA language codes
+     * Based on: https://developers.google.com/recaptcha/docs/language
+     */
+    public static function getRecaptchaLocales()
     {
-        $locales = [
-            'en'     => __('English', 'multilingual-forms-fluent-forms-wpml'),
-            'af'     => __('Afrikaans', 'multilingual-forms-fluent-forms-wpml'),
-            'sq'     => __('Albanian', 'multilingual-forms-fluent-forms-wpml'),
-            'ar-DZ'  => __('Algerian Arabic', 'multilingual-forms-fluent-forms-wpml'),
-            'am'     => __('Amharic', 'multilingual-forms-fluent-forms-wpml'),
-            'ar'     => __('Arabic', 'multilingual-forms-fluent-forms-wpml'),
-            'hy'     => __('Armenian', 'multilingual-forms-fluent-forms-wpml'),
-            'az'     => __('Azerbaijani', 'multilingual-forms-fluent-forms-wpml'),
-            'eu'     => __('Basque', 'multilingual-forms-fluent-forms-wpml'),
-            'be'     => __('Belarusian', 'multilingual-forms-fluent-forms-wpml'),
-            'bn'     => __('Bengali', 'multilingual-forms-fluent-forms-wpml'),
-            'bs'     => __('Bosnian', 'multilingual-forms-fluent-forms-wpml'),
-            'bg'     => __('Bulgarian', 'multilingual-forms-fluent-forms-wpml'),
-            'ca'     => __('Catalan', 'multilingual-forms-fluent-forms-wpml'),
-            'zh-HK'  => __('Chinese Hong Kong', 'multilingual-forms-fluent-forms-wpml'),
-            'zh-CN'  => __('Chinese Simplified', 'multilingual-forms-fluent-forms-wpml'),
-            'zh-TW'  => __('Chinese Traditional', 'multilingual-forms-fluent-forms-wpml'),
-            'hr'     => __('Croatian', 'multilingual-forms-fluent-forms-wpml'),
-            'cs'     => __('Czech', 'multilingual-forms-fluent-forms-wpml'),
-            'da'     => __('Danish', 'multilingual-forms-fluent-forms-wpml'),
-            'nl'     => __('Dutch', 'multilingual-forms-fluent-forms-wpml'),
-            'en-GB'  => __('English/UK', 'multilingual-forms-fluent-forms-wpml'),
-            'eo'     => __('Esperanto', 'multilingual-forms-fluent-forms-wpml'),
-            'et'     => __('Estonian', 'multilingual-forms-fluent-forms-wpml'),
-            'fo'     => __('Faroese', 'multilingual-forms-fluent-forms-wpml'),
-            'fa'     => __('Farsi/Persian', 'multilingual-forms-fluent-forms-wpml'),
-            'fil'    => __('Filipino', 'multilingual-forms-fluent-forms-wpml'),
-            'fi'     => __('Finnish', 'multilingual-forms-fluent-forms-wpml'),
-            'fr'     => __('French', 'multilingual-forms-fluent-forms-wpml'),
-            'fr-CA'  => __('French/Canadian', 'multilingual-forms-fluent-forms-wpml'),
-            'fr-CH'  => __('French/Swiss', 'multilingual-forms-fluent-forms-wpml'),
-            'gl'     => __('Galician', 'multilingual-forms-fluent-forms-wpml'),
-            'ka'     => __('Georgian', 'multilingual-forms-fluent-forms-wpml'),
-            'de'     => __('German', 'multilingual-forms-fluent-forms-wpml'),
-            'de-AT'  => __('German/Austria', 'multilingual-forms-fluent-forms-wpml'),
-            'de-CH'  => __('German/Switzerland', 'multilingual-forms-fluent-forms-wpml'),
-            'el'     => __('Greek', 'multilingual-forms-fluent-forms-wpml'),
-            'gu'     => __('Gujarati', 'multilingual-forms-fluent-forms-wpml'),
-            'he'     => __('Hebrew', 'multilingual-forms-fluent-forms-wpml'),
-            'iw'     => __('Hebrew', 'multilingual-forms-fluent-forms-wpml'),
-            'hi'     => __('Hindi', 'multilingual-forms-fluent-forms-wpml'),
-            'hu'     => __('Hungarian', 'multilingual-forms-fluent-forms-wpml'),
-            'is'     => __('Icelandic', 'multilingual-forms-fluent-forms-wpml'),
-            'id'     => __('Indonesian', 'multilingual-forms-fluent-forms-wpml'),
-            'it'     => __('Italian', 'multilingual-forms-fluent-forms-wpml'),
-            'ja'     => __('Japanese', 'multilingual-forms-fluent-forms-wpml'),
-            'kn'     => __('Kannada', 'multilingual-forms-fluent-forms-wpml'),
-            'kk'     => __('Kazakh', 'multilingual-forms-fluent-forms-wpml'),
-            'km'     => __('Khmer', 'multilingual-forms-fluent-forms-wpml'),
-            'ko'     => __('Korean', 'multilingual-forms-fluent-forms-wpml'),
-            'ky'     => __('Kyrgyz', 'multilingual-forms-fluent-forms-wpml'),
-            'lo'     => __('Laothian', 'multilingual-forms-fluent-forms-wpml'),
-            'lv'     => __('Latvian', 'multilingual-forms-fluent-forms-wpml'),
-            'lt'     => __('Lithuanian', 'multilingual-forms-fluent-forms-wpml'),
-            'lb'     => __('Luxembourgish', 'multilingual-forms-fluent-forms-wpml'),
-            'mk'     => __('Macedonian', 'multilingual-forms-fluent-forms-wpml'),
-            'ml'     => __('Malayalam', 'multilingual-forms-fluent-forms-wpml'),
-            'ms'     => __('Malaysian', 'multilingual-forms-fluent-forms-wpml'),
-            'mr'     => __('Marathi', 'multilingual-forms-fluent-forms-wpml'),
-            'no'     => __('Norwegian', 'multilingual-forms-fluent-forms-wpml'),
-            'nb'     => __('Norwegian Bokmål', 'multilingual-forms-fluent-forms-wpml'),
-            'nn'     => __('Norwegian Nynorsk', 'multilingual-forms-fluent-forms-wpml'),
-            'pl'     => __('Polish', 'multilingual-forms-fluent-forms-wpml'),
-            'pt'     => __('Portuguese', 'multilingual-forms-fluent-forms-wpml'),
-            'pt-BR'  => __('Portuguese/Brazilian', 'multilingual-forms-fluent-forms-wpml'),
-            'pt-PT'  => __('Portuguese/Portugal', 'multilingual-forms-fluent-forms-wpml'),
-            'rm'     => __('Romansh', 'multilingual-forms-fluent-forms-wpml'),
-            'ro'     => __('Romanian', 'multilingual-forms-fluent-forms-wpml'),
-            'ru'     => __('Russian', 'multilingual-forms-fluent-forms-wpml'),
-            'sr'     => __('Serbian', 'multilingual-forms-fluent-forms-wpml'),
-            'sr-SR'  => __('Serbian', 'multilingual-forms-fluent-forms-wpml'),
-            'si'     => __('Sinhalese', 'multilingual-forms-fluent-forms-wpml'),
-            'sk'     => __('Slovak', 'multilingual-forms-fluent-forms-wpml'),
-            'sl'     => __('Slovenian', 'multilingual-forms-fluent-forms-wpml'),
-            'es'     => __('Spanish', 'multilingual-forms-fluent-forms-wpml'),
-            'es-419' => __('Spanish/Latin America', 'multilingual-forms-fluent-forms-wpml'),
-            'sw'     => __('Swahili', 'multilingual-forms-fluent-forms-wpml'),
-            'sv'     => __('Swedish', 'multilingual-forms-fluent-forms-wpml'),
-            'ta'     => __('Tamil', 'multilingual-forms-fluent-forms-wpml'),
-            'te'     => __('Telugu', 'multilingual-forms-fluent-forms-wpml'),
-            'th'     => __('Thai', 'multilingual-forms-fluent-forms-wpml'),
-            'tj'     => __('Tajiki', 'multilingual-forms-fluent-forms-wpml'),
-            'tr'     => __('Turkish', 'multilingual-forms-fluent-forms-wpml'),
-            'uk'     => __('Ukrainian', 'multilingual-forms-fluent-forms-wpml'),
-            'ur'     => __('Urdu', 'multilingual-forms-fluent-forms-wpml'),
-            'vi'     => __('Vietnamese', 'multilingual-forms-fluent-forms-wpml'),
-            'cy-GB'  => __('Welsh', 'multilingual-forms-fluent-forms-wpml'),
-            'zu'     => __('Zulu', 'multilingual-forms-fluent-forms-wpml'),
+        return [
+            'ar' => 'ar',        // Arabic
+            'af' => 'af',        // Afrikaans
+            'am' => 'am',        // Amharic
+            'hy' => 'hy',        // Armenian
+            'az' => 'az',        // Azerbaijani
+            'eu' => 'eu',        // Basque
+            'bn' => 'bn',        // Bengali
+            'bg' => 'bg',        // Bulgarian
+            'ca' => 'ca',        // Catalan
+            'zh-HK' => 'zh-HK',  // Chinese (Hong Kong)
+            'zh-CN' => 'zh-CN',  // Chinese (Simplified)
+            'zh-TW' => 'zh-TW',  // Chinese (Traditional)
+            'hr' => 'hr',        // Croatian
+            'cs' => 'cs',        // Czech
+            'da' => 'da',        // Danish
+            'nl' => 'nl',        // Dutch
+            'en' => 'en',        // English (US)
+            'en-GB' => 'en-GB',  // English (UK)
+            'et' => 'et',        // Estonian
+            'fil' => 'fil',      // Filipino
+            'fi' => 'fi',        // Finnish
+            'fr' => 'fr',        // French
+            'fr-CA' => 'fr-CA',  // French (Canadian)
+            'gl' => 'gl',        // Galician
+            'ka' => 'ka',        // Georgian
+            'de' => 'de',        // German
+            'de-AT' => 'de-AT',  // German (Austria)
+            'de-CH' => 'de-CH',  // German (Switzerland)
+            'el' => 'el',        // Greek
+            'gu' => 'gu',        // Gujarati
+            'iw' => 'he',        // Hebrew (WPML uses 'iw', reCAPTCHA uses 'he')
+            'he' => 'he',        // Hebrew
+            'hi' => 'hi',        // Hindi
+            'hu' => 'hu',        // Hungarian
+            'is' => 'is',        // Icelandic
+            'id' => 'id',        // Indonesian
+            'it' => 'it',        // Italian
+            'ja' => 'ja',        // Japanese
+            'kn' => 'kn',        // Kannada
+            'ko' => 'ko',        // Korean
+            'lo' => 'lo',        // Laothian
+            'lv' => 'lv',        // Latvian
+            'lt' => 'lt',        // Lithuanian
+            'ms' => 'ms',        // Malay
+            'ml' => 'ml',        // Malayalam
+            'mr' => 'mr',        // Marathi
+            'mn' => 'mn',        // Mongolian
+            'no' => 'no',        // Norwegian
+            'fa' => 'fa',        // Persian
+            'pl' => 'pl',        // Polish
+            'pt' => 'pt',        // Portuguese
+            'pt-BR' => 'pt-BR',  // Portuguese (Brazil)
+            'pt-PT' => 'pt-PT',  // Portuguese (Portugal)
+            'ro' => 'ro',        // Romanian
+            'ru' => 'ru',        // Russian
+            'sr' => 'sr',        // Serbian
+            'si' => 'si',        // Sinhalese
+            'sk' => 'sk',        // Slovak
+            'sl' => 'sl',        // Slovenian
+            'es' => 'es',        // Spanish
+            'es-419' => 'es-419', // Spanish (Latin America)
+            'sw' => 'sw',        // Swahili
+            'sv' => 'sv',        // Swedish
+            'ta' => 'ta',        // Tamil
+            'te' => 'te',        // Telugu
+            'th' => 'th',        // Thai
+            'tr' => 'tr',        // Turkish
+            'uk' => 'uk',        // Ukrainian
+            'ur' => 'ur',        // Urdu
+            'vi' => 'vi',        // Vietnamese
+            'zu' => 'zu',        // Zulu
         ];
+    }
 
-        $unset = [];
+    /**
+     * Get supported hCaptcha language codes
+     * Based on: https://docs.hcaptcha.com/languages/
+     */
+    public static function getHcaptchaLocales()
+    {
+        return [
+            'af' => 'af',        // Afrikaans
+            'sq' => 'sq',        // Albanian
+            'am' => 'am',        // Amharic
+            'ar' => 'ar',        // Arabic
+            'hy' => 'hy',        // Armenian
+            'az' => 'az',        // Azerbaijani
+            'eu' => 'eu',        // Basque
+            'be' => 'be',        // Belarusian
+            'bn' => 'bn',        // Bengali
+            'bg' => 'bg',        // Bulgarian
+            'ca' => 'ca',        // Catalan
+            'zh-CN' => 'zh-CN',  // Chinese (Simplified)
+            'zh-TW' => 'zh-TW',  // Chinese (Traditional)
+            'hr' => 'hr',        // Croatian
+            'cs' => 'cs',        // Czech
+            'da' => 'da',        // Danish
+            'nl' => 'nl',        // Dutch
+            'en' => 'en',        // English
+            'et' => 'et',        // Estonian
+            'fil' => 'fil',      // Filipino
+            'fi' => 'fi',        // Finnish
+            'fr' => 'fr',        // French
+            'gl' => 'gl',        // Galician
+            'ka' => 'ka',        // Georgian
+            'de' => 'de',        // German
+            'el' => 'el',        // Greek
+            'gu' => 'gu',        // Gujarati
+            'iw' => 'he',        // Hebrew (WPML uses 'iw', hCaptcha uses 'he')
+            'he' => 'he',        // Hebrew
+            'hi' => 'hi',        // Hindi
+            'hu' => 'hu',        // Hungarian
+            'is' => 'is',        // Icelandic
+            'id' => 'id',        // Indonesian
+            'it' => 'it',        // Italian
+            'ja' => 'ja',        // Japanese
+            'kn' => 'kn',        // Kannada
+            'kk' => 'kk',        // Kazakh
+            'km' => 'km',        // Khmer
+            'ko' => 'ko',        // Korean
+            'ky' => 'ky',        // Kyrgyz
+            'lo' => 'lo',        // Lao
+            'lv' => 'lv',        // Latvian
+            'lt' => 'lt',        // Lithuanian
+            'mk' => 'mk',        // Macedonian
+            'ms' => 'ms',        // Malay
+            'ml' => 'ml',        // Malayalam
+            'mt' => 'mt',        // Maltese
+            'mn' => 'mn',        // Mongolian
+            'my' => 'my',        // Myanmar (Burmese)
+            'ne' => 'ne',        // Nepali
+            'no' => 'no',        // Norwegian
+            'fa' => 'fa',        // Persian
+            'pl' => 'pl',        // Polish
+            'pt' => 'pt',        // Portuguese
+            'pt-BR' => 'pt-BR',  // Portuguese (Brazil)
+            'ro' => 'ro',        // Romanian
+            'ru' => 'ru',        // Russian
+            'sr' => 'sr',        // Serbian
+            'si' => 'si',        // Sinhala
+            'sk' => 'sk',        // Slovak
+            'sl' => 'sl',        // Slovenian
+            'es' => 'es',        // Spanish
+            'sw' => 'sw',        // Swahili
+            'sv' => 'sv',        // Swedish
+            'ta' => 'ta',        // Tamil
+            'te' => 'te',        // Telugu
+            'th' => 'th',        // Thai
+            'tr' => 'tr',        // Turkish
+            'uk' => 'uk',        // Ukrainian
+            'ur' => 'ur',        // Urdu
+            'uz' => 'uz',        // Uzbek
+            'vi' => 'vi',        // Vietnamese
+            'zu' => 'zu',        // Zulu
+        ];
+    }
 
-        if ($type === 'captcha') {
-            $unset = [
-                'sq',
-                'bs',
-                'eo',
-                'fo',
-                'fr-CH',
-                'sr-SR',
-                'ar-DZ',
-                'be',
-                'cy-GB',
-                'kk',
-                'km',
-                'ky',
-                'lb',
-                'mk',
-                'nb',
-                'nn',
-                'rm',
-                'tj'
-            ];
-        } elseif ($type === 'date') {
-            $unset = [
-                'fil',
-                'fr-CA',
-                'de-AT',
-                'de-CH',
-                'iw',
-                'hi',
-                'pt',
-                'pt-PT',
-                'es-419',
-                'mr',
-                'lo',
-                'kn',
-                'si',
-                'gu',
-                'bn',
-                'zu',
-                'ur',
-                'te',
-                'sw',
-                'am'
-            ];
+    /**
+     * Get supported Turnstile language codes
+     * Based on: https://developers.cloudflare.com/turnstile/reference/supported-languages/
+     */
+    public static function getTurnstileLocales()
+    {
+        return [
+            'ar-EG' => 'ar-EG',  // Arabic (Egypt)
+            'de' => 'de',        // German
+            'en' => 'en',        // English
+            'es' => 'es',        // Spanish
+            'fa' => 'fa',        // Persian
+            'fr' => 'fr',        // French
+            'id' => 'id',        // Indonesian
+            'it' => 'it',        // Italian
+            'ja' => 'ja',        // Japanese
+            'ko' => 'ko',        // Korean
+            'nl' => 'nl',        // Dutch
+            'pl' => 'pl',        // Polish
+            'pt-BR' => 'pt-BR',  // Portuguese (Brazil)
+            'ru' => 'ru',        // Russian
+            'tr' => 'tr',        // Turkish
+            'zh-CN' => 'zh-CN',  // Chinese (Simplified)
+            'zh-TW' => 'zh-TW',  // Chinese (Traditional)
+            'ar' => 'ar-EG',     // Arabic -> Arabic (Egypt)
+            'pt' => 'pt-BR',     // Portuguese -> Portuguese (Brazil)
+            'zh' => 'zh-CN',     // Chinese -> Chinese (Simplified)
+        ];
+    }
+
+    public function translateEmailTemplateHeader($header, $form, $notification)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $header;
         }
 
-        return array_diff_key($locales, array_flip($unset));
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $header, "form_{$form->id}_email_template_header", $package);
+    }
+
+    public function translateEmailTemplateFooter($footer, $form, $notification)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $footer;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $footer, "form_{$form->id}_email_template_footer", $package);
+    }
+
+    public function translateEmailSubjectLine($subject, $form, $notification)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $subject;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $subject, "form_{$form->id}_email_subject_line", $package);
+    }
+
+    public function translateSubscriptionMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_subscription_confirmation_message", $package);
+    }
+
+    public function translateRecurringPaymentMessage($message, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_recurring_payment_message", $package);
+    }
+
+    public function translateSubmissionMessageParse($message, $insertId, $formData, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_submission_message_parse", $package);
+    }
+
+    public function translateFormSubmissionMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'file_upload_in_progress' => 'file_upload_in_progress_message',
+            'javascript_handler_failed' => 'javascript_handler_failed_message'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translatePaymentHandlerMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'stock_out_message' => 'payment_stock_out_message',
+            'item_label' => 'payment_item_label',
+            'price_label' => 'payment_price_label',
+            'qty_label' => 'payment_qty_label',
+            'line_total_label' => 'payment_line_total_label',
+            'sub_total_label' => 'payment_sub_total_label',
+            'discount_label' => 'payment_discount_label',
+            'total_label' => 'payment_total_label',
+            'signup_fee_label' => 'payment_signup_fee_label',
+            'trial_label' => 'payment_trial_label',
+            'processing_text' => 'payment_processing_text',
+            'confirming_text' => 'payment_confirming_text'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateFormSaveProgressMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'copy_button' => 'save_progress_copy_button',
+            'email_button' => 'save_progress_email_button',
+            'email_placeholder' => 'save_progress_email_placeholder',
+            'copy_success' => 'save_progress_copy_success'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translateAddressAutocompleteMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'please_wait' => 'address_autocomplete_please_wait',
+            'location_not_determined' => 'address_autocomplete_location_not_determined',
+            'address_fetch_failed' => 'address_autocomplete_address_fetch_failed',
+            'geolocation_failed' => 'address_autocomplete_geolocation_failed',
+            'geolocation_not_supported' => 'address_autocomplete_geolocation_not_supported'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
+    }
+
+    public function translatePaymentGatewayMessages($messages, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $messages;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translatableKeys = [
+            'request_failed' => 'payment_gateway_request_failed',
+            'payment_failed' => 'payment_gateway_payment_failed',
+            'no_method_found' => 'payment_gateway_no_method_found',
+            'processing_text' => 'payment_gateway_processing_text'
+        ];
+
+        foreach ($translatableKeys as $key => $translationKey) {
+            if (isset($messages[$key])) {
+                $messages[$key] = apply_filters('wpml_translate_string', $messages[$key], "form_{$form->id}_{$translationKey}", $package);
+            }
+        }
+
+        return $messages;
     }
 }
