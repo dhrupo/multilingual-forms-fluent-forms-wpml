@@ -8,6 +8,9 @@
  * Version: 1.0.0
  * License: GPLv2 or later
  * Text Domain: multilingual-forms-fluent-forms-wpml
+ * Requires at least: 5.0
+ * Requires PHP: 7.4
+ * Requires Plugins: fluentform
  */
 
 /**
