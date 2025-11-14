@@ -199,7 +199,7 @@ class SettingsController
 
         $form->settings = $formSettings;
         
-        $formFields = FormFieldsParser::getFields($form);
+        $formFields = FormFieldsParser::getFields($form, true);
         $package = $this->getFormPackage($form);
 
         // Extract and register strings from regular form fields
@@ -383,7 +383,7 @@ class SettingsController
             return $form;
         }
 
-        $formFields = FormFieldsParser::getFields($form);
+        $formFields = FormFieldsParser::getFields($form, true);
 
         $extractedFields = [];
         foreach ($formFields as $field) {
