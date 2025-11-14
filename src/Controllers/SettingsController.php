@@ -207,19 +207,19 @@ class SettingsController
 
         // Extract and register strings from submit button
         if (isset($form->fields['submitButton'])) {
-            $submitButton = json_decode(json_encode($form->fields['submitButton']));
+            $submitButton = json_decode(json_encode($form->fields['submitButton']), true);
             $this->extractAndRegisterStrings($submitButton, $formId, $package);
         }
 
         // Extract and register strings from step start elements
         if (isset($form->fields['stepsWrapper']['stepStart'])) {
-            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']));
+            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']), true);
             $this->extractAndRegisterStrings($stepStart, $formId, $package);
         }
 
         // Extract and register strings from step end elements
         if (isset($form->fields['stepsWrapper']['stepEnd'])) {
-            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']));
+            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']), true);
             $this->extractAndRegisterStrings($stepEnd, $formId, $package);
         }
 
@@ -392,18 +392,18 @@ class SettingsController
 
         // Extract strings from submit button
         if (isset($form->fields['submitButton'])) {
-            $submitButton = json_decode(json_encode($form->fields['submitButton']));
+            $submitButton = json_decode(json_encode($form->fields['submitButton']), true);
             $this->extractFieldStrings($extractedFields, $submitButton, $form->id);
         }
 
         // Extract strings from step wrapper elements
         if (isset($form->fields['stepsWrapper']['stepStart'])) {
-            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']));
+            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']), true);
             $this->extractFieldStrings($extractedFields, $stepStart, $form->id);
         }
 
         if (isset($form->fields['stepsWrapper']['stepEnd'])) {
-            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']));
+            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']), true);
             $this->extractFieldStrings($extractedFields, $stepEnd, $form->id);
         }
 
@@ -1248,6 +1248,10 @@ class SettingsController
     // Extract all translatable strings form fields
     private function extractFieldStrings(&$fields, $field, $formId, $prefix = '')
     {
+        if (is_array($field)) {
+            $field = json_decode(json_encode($field));
+        }
+
         $fieldIdentifier = isset($field->attributes->name) ? $field->attributes->name :
             (isset($field->uniqElKey) ? $field->uniqElKey : null);
 
