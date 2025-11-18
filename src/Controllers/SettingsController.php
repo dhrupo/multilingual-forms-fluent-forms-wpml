@@ -83,6 +83,10 @@ class SettingsController
         add_filter('fluentform/stripe_payment_redirect_message', [$this, 'translateStripePaymentRedirectMessage'], 10, 3);
         add_filter('fluentform/stripe_payment_cancelled_message', [$this, 'translateStripePaymentCancelledMessage'], 10, 3);
 
+        // Quiz translation filters
+        add_filter('fluentform/quiz_score_value', [$this, 'translateQuizScoreValue'], 10, 4);
+        add_filter('fluentform/quiz_no_grade_label', [$this, 'translateQuizNoGradeLabel'], 10, 2);
+
         // Square specific
         add_filter('fluentform/square_payment_redirect_message', [$this, 'translateSquarePaymentRedirectMessage'], 10, 3);
 
@@ -447,17 +451,34 @@ class SettingsController
 
         $package = $this->getFormPackage($form);
 
+        // Check if this is a conditional confirmation (has 'id' field) or default confirmation
+        $confirmationId = isset($confirmation['id']) ? $confirmation['id'] : null;
+        
+        if ($confirmationId) {
+            // This is a conditional confirmation
+            $messageKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_message";
+            $customPageKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_custom_page";
+            $pageTitleKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_page_title";
+        } else {
+            // This is the default confirmation
+            $messageKey = "form_{$form->id}_confirmation_message";
+            $customPageKey = "form_{$form->id}_confirmation_custom_page";
+            $pageTitleKey = "form_{$form->id}_confirmation_page_title";
+        }
+
         // Translate main confirmation message
         if (!empty($confirmation['messageToShow'])) {
-            $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], "form_{$form->id}_confirmation_message", $package);
+            $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], $messageKey, $package);
+        }
+
+        // Translate custom page HTML content
+        if (!empty($confirmation['customPageHtml'])) {
+            $confirmation['customPageHtml'] = apply_filters('wpml_translate_string', $confirmation['customPageHtml'], $customPageKey, $package);
         }
 
         // Translate success page title if present
-        if (!empty($confirmation['samePageFormBehavior']) && !empty($confirmation['messageToShow'])) {
-            // This is already handled above, but we can add specific handling for different behavior types
-            if (isset($confirmation['successPageTitle'])) {
-                $confirmation['successPageTitle'] = apply_filters('wpml_translate_string', $confirmation['successPageTitle'], "form_{$form->id}_confirmation_page_title", $package);
-            }
+        if (!empty($confirmation['successPageTitle'])) {
+            $confirmation['successPageTitle'] = apply_filters('wpml_translate_string', $confirmation['successPageTitle'], $pageTitleKey, $package);
         }
 
         return $confirmation;
@@ -687,11 +708,11 @@ class SettingsController
         $package = $this->getFormPackage($form);
 
         $translatableKeys = [
-            'approval_message' => 'approval_pending_message',
+            'approval_message' => 'admin_approval_pending_message',
             'approved_message' => 'approval_approved_message',
             'rejected_message' => 'approval_rejected_message',
-            'notification_subject' => 'approval_notification_subject',
-            'notification_body' => 'approval_notification_body'
+            'notification_subject' => 'admin_approval_email_subject',
+            'notification_body' => 'admin_approval_email_body'
         ];
 
         foreach ($translatableKeys as $key => $translationKey) {
@@ -1107,6 +1128,69 @@ class SettingsController
 
         return $messages;
     }
+
+    public function translateQuizScoreValue($result, $formId, $scoreType, $quizResults)
+    {
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $result;
+        }
+
+        $package = $this->getFormPackage(Form::find($formId));
+
+        // Translate quiz grade labels
+        if ($scoreType === 'grade' && is_string($result)) {
+            // Get quiz settings to find the grade index
+            $quizSettings = Helper::getFormMeta($formId, 'quiz_settings', true);
+            
+            if ($quizSettings) {
+                // Handle both array of quiz settings and single quiz settings object
+                $quizSettingsArray = [];
+                if (isset($quizSettings[0]) && is_array($quizSettings[0])) {
+                    $quizSettingsArray = $quizSettings;
+                } elseif (is_array($quizSettings)) {
+                    $quizSettingsArray = [$quizSettings];
+                }
+                
+                foreach ($quizSettingsArray as $quizIndex => $quizSetting) {
+                    if (isset($quizSetting['grades']) && is_array($quizSetting['grades'])) {
+                        foreach ($quizSetting['grades'] as $gradeIndex => $grade) {
+                            if (isset($grade['label']) && $grade['label'] === $result) {
+                                $translationKey = "form_{$formId}_quiz_grade_{$quizIndex}_{$gradeIndex}_label";
+                                $translated = apply_filters('wpml_translate_string', $result, $translationKey, $package);
+                                return $translated;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    public function translateQuizNoGradeLabel($label, $formId = null)
+    {
+        // If formId is not provided, try to get it from context or return label as-is
+        if (!$formId) {
+            // Try to get formId from global form context if available
+            // This is a fallback for cases where the filter doesn't pass formId
+            return $label;
+        }
+
+        if (!$this->isWpmlEnabledOnForm($formId)) {
+            return $label;
+        }
+
+        $form = Form::find($formId);
+        if (!$form) {
+            return $label;
+        }
+
+        $package = $this->getFormPackage($form);
+        $translationKey = "form_{$formId}_quiz_no_grade_label";
+        
+        return apply_filters('wpml_translate_string', $label, $translationKey, $package);
+    }
     
     public function translateFeedValuesBeforeParse(&$feed, $insertId, $formData, $form)
     {
@@ -1261,7 +1345,7 @@ class SettingsController
                 $fieldIdentifier = 'step_start';
             } elseif ($field->element === 'step_end') {
                 $fieldIdentifier = 'step_end';
-            } elseif ($field->element === 'button' && isset($field->attributes->type) && $field->attributes->type === 'submit') {
+            } elseif (($field->element === 'button' && isset($field->attributes->type) && $field->attributes->type === 'submit') || $field->element === 'custom_submit_button') {
                 $fieldIdentifier = 'submit_button';
             }
         }
@@ -1562,6 +1646,7 @@ class SettingsController
                 break;
 
             case 'button':
+            case 'custom_submit_button':
                 // Extract button text
                 if (!empty($field->settings->button_ui) && !empty($field->settings->button_ui->text)) {
                     $fields["{$fieldIdentifier}->button_ui->text"] = $field->settings->button_ui->text;
@@ -1651,11 +1736,32 @@ class SettingsController
                 }
                 break;
 
+            case 'quiz_score':
+                // Extract personality quiz options if they exist
+                if (!empty($field->options) && is_array($field->options)) {
+                    foreach ($field->options as $optionValue => $optionLabel) {
+                        if (!empty($optionLabel)) {
+                            $fields["{$fieldIdentifier}->Personality Options->{$optionValue}"] = $optionLabel;
+                        }
+                    }
+                }
+                break;
+
             case 'recaptcha':
             case 'hcaptcha':
             case 'turnstile':
                 // These CAPTCHA fields only have labels that are handled by common field processing
                 // No additional field-specific translatable content
+                break;
+
+            case 'accordion':
+                // Extract accordion title and description
+                if (!empty($field->settings->title)) {
+                    $fields["{$fieldIdentifier}->title"] = $field->settings->title;
+                }
+                if (!empty($field->settings->description)) {
+                    $fields["{$fieldIdentifier}->description"] = $field->settings->description;
+                }
                 break;
         }
     }
@@ -1890,6 +1996,92 @@ class SettingsController
                 }
             }
         }
+
+        // Conditional Confirmations (Pro) - stored in FormMeta with meta_key 'confirmations'
+        // Each confirmation is stored as a separate FormMeta row, so $settings['confirmations'] is an array
+        // where keys are FormMeta IDs and values are the confirmation objects
+        if (isset($settings['confirmations'])) {
+            foreach ($settings['confirmations'] as $metaId => $confirmation) {
+                // Handle both direct confirmation object and array of confirmations
+                $confirmationsToProcess = [];
+                if (isset($confirmation[0]) && is_array($confirmation[0])) {
+                    // Array of confirmations (unlikely but handle it)
+                    $confirmationsToProcess = $confirmation;
+                } elseif (is_array($confirmation)) {
+                    // Single confirmation object
+                    $confirmationsToProcess = [$confirmation];
+                }
+                
+                foreach ($confirmationsToProcess as $confirmation) {
+                    if (is_array($confirmation) && (!isset($confirmation['active']) || $confirmation['active'])) {
+                        // Use the confirmation's 'id' if available, otherwise use the FormMeta ID
+                        $confirmationIndex = isset($confirmation['id']) ? $confirmation['id'] : $metaId;
+                        
+                        // Main confirmation message
+                        if (isset($confirmation['messageToShow']) && !empty($confirmation['messageToShow'])) {
+                            $extractedStrings["form_{$formId}_conditional_confirmation_{$confirmationIndex}_message"] = $confirmation['messageToShow'];
+                        }
+                        
+                        // Custom page HTML content
+                        if (isset($confirmation['customPageHtml']) && !empty($confirmation['customPageHtml'])) {
+                            $extractedStrings["form_{$formId}_conditional_confirmation_{$confirmationIndex}_custom_page"] = $confirmation['customPageHtml'];
+                        }
+                        
+                        // Success page title
+                        if (isset($confirmation['successPageTitle']) && !empty($confirmation['successPageTitle'])) {
+                            $extractedStrings["form_{$formId}_conditional_confirmation_{$confirmationIndex}_page_title"] = $confirmation['successPageTitle'];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Admin Approval Settings (Pro) - stored in FormMeta with meta_key 'admin_approval_settings'
+        if (isset($settings['admin_approval_settings'])) {
+            $adminApprovalSettings = is_array($settings['admin_approval_settings']) && isset($settings['admin_approval_settings'][0]) 
+                ? $settings['admin_approval_settings'][0] 
+                : $settings['admin_approval_settings'];
+            
+            if (isset($adminApprovalSettings['approval_pending_message'])) {
+                $extractedStrings["form_{$formId}_admin_approval_pending_message"] = $adminApprovalSettings['approval_pending_message'];
+            }
+            
+            if (isset($adminApprovalSettings['email_subject'])) {
+                $extractedStrings["form_{$formId}_admin_approval_email_subject"] = $adminApprovalSettings['email_subject'];
+            }
+            
+            if (isset($adminApprovalSettings['email_body'])) {
+                $extractedStrings["form_{$formId}_admin_approval_email_body"] = $adminApprovalSettings['email_body'];
+            }
+        }
+
+        // Quiz Grade Labels (Pro) - extract from quiz_settings grades array
+        if (isset($settings['quiz_settings'])) {
+            foreach ($settings['quiz_settings'] as $index => $quizSettings) {
+                // Handle both array of quiz settings and single quiz settings object
+                $quizSettingsToProcess = [];
+                if (isset($quizSettings[0]) && is_array($quizSettings[0])) {
+                    $quizSettingsToProcess = $quizSettings;
+                } elseif (is_array($quizSettings)) {
+                    $quizSettingsToProcess = [$quizSettings];
+                }
+                
+                foreach ($quizSettingsToProcess as $quizIndex => $quizSetting) {
+                    if (isset($quizSetting['grades']) && is_array($quizSetting['grades'])) {
+                        foreach ($quizSetting['grades'] as $gradeIndex => $grade) {
+                            if (isset($grade['label']) && !empty($grade['label'])) {
+                                $extractedStrings["form_{$formId}_quiz_grade_{$index}_{$gradeIndex}_label"] = $grade['label'];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Quiz "Not Graded" label - register default string for translation
+        // This is a default string that can be filtered, so we register the default for translation
+        // The filter will handle translation at runtime
+        $extractedStrings["form_{$formId}_quiz_no_grade_label"] = __('Not Graded', 'fluentformpro');
 
         foreach ($extractedStrings as $key => $value) {
             // Check if the string contains shortcodes or HTML
@@ -2286,6 +2478,7 @@ class SettingsController
 
             // For the submit button
             case 'button':
+            case 'custom_submit_button':
                 // Update button text
                 if (isset($field['settings']['button_ui']) && isset($field['settings']['button_ui']['text'])) {
                     $buttonTextKey = "{$fieldName}->button_ui->text";
@@ -2393,11 +2586,35 @@ class SettingsController
                 }
                 break;
 
+            case 'quiz_score':
+                // Update personality quiz options
+                if (isset($field['options']) && is_array($field['options'])) {
+                    foreach ($field['options'] as $optionValue => $optionLabel) {
+                        $personalityKey = "{$fieldName}->Personality Options->{$optionValue}";
+                        if (isset($translations[$personalityKey])) {
+                            $field['options'][$optionValue] = $translations[$personalityKey];
+                        }
+                    }
+                }
+                break;
+
             case 'recaptcha':
             case 'hcaptcha':
             case 'turnstile':
                 // These CAPTCHA fields only have labels that are handled by common field processing
                 // No additional field-specific translatable content to update
+                break;
+
+            case 'accordion':
+                // Update accordion title and description
+                $titleKey = "{$fieldName}->title";
+                if (isset($translations[$titleKey])) {
+                    $field['settings']['title'] = $translations[$titleKey];
+                }
+                $descriptionKey = "{$fieldName}->description";
+                if (isset($translations[$descriptionKey])) {
+                    $field['settings']['description'] = $translations[$descriptionKey];
+                }
                 break;
         }
     }
