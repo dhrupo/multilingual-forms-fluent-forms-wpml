@@ -16,7 +16,7 @@ class SettingsController
 {
     protected $app;
 
-    private static $currentNotificationFeedId;
+    private static $currentNotificationFeedId = null;
 
     public function __construct($app)
     {
@@ -390,7 +390,7 @@ class SettingsController
 
     public function setWpmlForm($form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $form;
         }
 
@@ -452,7 +452,7 @@ class SettingsController
     
     public function translateConfirmationMessage($confirmation, $formData, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $confirmation;
         }
 
@@ -1045,7 +1045,7 @@ class SettingsController
 
         // Translate validation messages
         foreach ($messages as $key => $message) {
-            $translationKey = "form_{$form->id}_validation_" . str_replace('.', '_', $key);
+            $translationKey = "form_{$form->id}_validation_" . str_replace('.', '_', (string) $key);
             $messages[$key] = apply_filters('wpml_translate_string', $message, $translationKey, $package);
         }
 
@@ -1327,7 +1327,7 @@ class SettingsController
         }
 
         // Payment Integration Messages
-        if (strpos($metaKey, 'payment_') === 0 || in_array($metaKey, ['paypal', 'stripe', 'razorpay', 'mollie', 'paystack'])) {
+        if (is_string($metaKey) && (strpos($metaKey, 'payment_') === 0 || in_array($metaKey, ['paypal', 'stripe', 'razorpay', 'mollie', 'paystack']))) {
             $paymentKeys = [
                 'payment_success_message' => 'payment_success_message',
                 'payment_error_message' => 'payment_error_message',
@@ -1370,10 +1370,9 @@ class SettingsController
         }
 
         foreach ($extractedFields as $key => $value) {
-            // Check if the string contains shortcodes or HTML
             $type = 'LINE';
-            if (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false) {
-                $type = 'AREA'; // Use AREA for HTML/shortcodes
+            if (is_string($value) && (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false)) {
+                $type = 'AREA';
             }
 
             do_action('wpml_register_string', $value, $key, $package, $formId, $type);
@@ -2137,10 +2136,9 @@ class SettingsController
         $extractedStrings["form_{$formId}_quiz_no_grade_label"] = __('Not Graded', 'fluentformpro');
 
         foreach ($extractedStrings as $key => $value) {
-            // Check if the string contains shortcodes or HTML
             $type = 'LINE';
-            if (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false) {
-                $type = 'AREA'; // Use AREA for HTML/shortcodes
+            if (is_string($value) && (preg_match('/{([^}]+)}/', $value) || preg_match('/#([^#]+)#/', $value) || strpos($value, '<') !== false)) {
+                $type = 'AREA';
             }
 
             do_action('wpml_register_string', $value, $key, $package, $formId, $type);
