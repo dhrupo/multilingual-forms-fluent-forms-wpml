@@ -16,6 +16,8 @@ class SettingsController
 {
     protected $app;
 
+    private static $currentNotificationFeedId;
+
     public function __construct($app)
     {
         $this->app = $app;
@@ -43,6 +45,7 @@ class SettingsController
         add_filter('fluentform/keyword_restriction_message', [$this, 'translateKeywordRestrictionMessage'], 10, 2);
 
         add_filter('fluentform/integration_feed_before_parse', [$this, 'translateFeedValuesBeforeParse'], 10, 4);
+        add_action('fluentform/integration_notify_notifications', [$this, 'setCurrentNotificationFeedId'], 5, 4);
 
         add_filter('fluentform/input_label_shortcode', [$this, 'translateLabelShortcode'], 10, 3);
 
@@ -104,6 +107,7 @@ class SettingsController
         // Form Validation Message Filters
         add_filter('fluentform/validations', [$this, 'translateValidationMessages'], 10, 3);
         add_filter('fluentform/validation_error_message', [$this, 'translateValidationErrorMessage'], 10, 3);
+        add_filter('fluentform/token_based_validation_error_message', [$this, 'translateTokenBasedValidationErrorMessage'], 10, 2);
 
         // Conditional Logic
         add_filter('fluentform/conditional_content', [$this, 'translateConditionalContent'], 10, 3);
@@ -115,7 +119,8 @@ class SettingsController
         // Email Template Filters
         add_filter('fluentform/email_header', [$this, 'translateEmailTemplateHeader'], 10, 3);
         add_filter('fluentform/email_footer', [$this, 'translateEmailTemplateFooter'], 10, 3);
-        add_filter('fluentform/email_subject', [$this, 'translateEmailSubjectLine'], 10, 3);
+        add_filter('fluentform/email_subject', [$this, 'translateEmailSubjectLine'], 10, 4);
+        add_filter('fluentform/email_body', [$this, 'translateEmailBody'], 10, 4);
 
         // Subscription/Recurring Payment Filters
         add_filter('fluentform/subscription_confirmation_message', [$this, 'translateSubscriptionMessage'], 10, 3);
@@ -130,6 +135,8 @@ class SettingsController
         add_filter('fluentform/form_save_progress_messages', [$this, 'translateFormSaveProgressMessages'], 10, 2);
         add_filter('fluentform/address_autocomplete_messages', [$this, 'translateAddressAutocompleteMessages'], 10, 2);
         add_filter('fluentform/payment_gateway_messages', [$this, 'translatePaymentGatewayMessages'], 10, 2);
+
+        add_filter('fluentform/entry_lists_labels', [$this, 'translateEntryListsLabels'], 10, 2);
 
         add_filter('fluentform/all_data_shortcode_html', [$this, 'translateAllDataShortcode'],10, 4);
 
@@ -624,6 +631,22 @@ class SettingsController
         return $labels;
     }
 
+    public function translateEntryListsLabels($formLabels, $form)
+    {
+        if (!$this->isWpmlEnabledOnForm($form->id) || !is_array($formLabels)) {
+            return $formLabels;
+        }
+
+        $package = $this->getFormPackage($form);
+        foreach ($formLabels as $key => $label) {
+            if (is_string($label)) {
+                $formLabels[$key] = apply_filters('wpml_translate_string', $label, "form_{$form->id}_entry_list_label_{$key}", $package);
+            }
+        }
+
+        return $formLabels;
+    }
+
     public function translateStepNavigation($navigation, $form)
     {
         if (!$this->isWpmlEnabledOnForm($form->id)) {
@@ -1039,6 +1062,17 @@ class SettingsController
         return apply_filters('wpml_translate_string', $message, "form_{$form->id}_validation_error_message", $package);
     }
 
+    public function translateTokenBasedValidationErrorMessage($message, $formId)
+    {
+        $form = Form::find($formId);
+        if (!$form || !$this->isWpmlEnabledOnForm($formId)) {
+            return $message;
+        }
+
+        $package = $this->getFormPackage($form);
+        return apply_filters('wpml_translate_string', $message, "form_{$formId}_token_based_validation_message", $package);
+    }
+
     public function translateConditionalContent($content, $formData, $form)
     {
         if (!$this->isWpmlEnabledOnForm($form->id)) {
@@ -1191,13 +1225,32 @@ class SettingsController
         
         return apply_filters('wpml_translate_string', $label, $translationKey, $package);
     }
-    
-    public function translateFeedValuesBeforeParse(&$feed, $insertId, $formData, $form)
+
+    public function setCurrentNotificationFeedId($feed, $formData, $entry, $form)
     {
-        $formId = $form->id;
-        $package = $this->getFormPackage($form);
+        self::$currentNotificationFeedId = ArrayHelper::get($feed, 'id');
+    }
+
+    public function translateFeedValuesBeforeParse($feed, $insertId, $formData, $form)
+    {
+        if (is_array($form)) {
+            $formId = isset($form['id']) ? $form['id'] : null;
+            if ($formId === null) {
+                return $feed;
+            }
+            $package = [
+                'kind'  => 'Fluent Forms',
+                'name'  => $formId,
+                'title' => isset($form['title']) ? $form['title'] : '',
+            ];
+        } elseif (is_object($form) && isset($form->id)) {
+            $formId = $form->id;
+            $package = $this->getFormPackage($form);
+        } else {
+            return $feed;
+        }
         $id = ArrayHelper::get($feed, 'id');
-        
+
         // email notification
         if (ArrayHelper::get($feed, 'meta_key') === 'notifications') {
             if (isset($feed['settings']['subject'])) {
@@ -3059,7 +3112,7 @@ class SettingsController
 
     public function translateEmailTemplateHeader($header, $form, $notification)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $header;
         }
 
@@ -3069,7 +3122,7 @@ class SettingsController
 
     public function translateEmailTemplateFooter($footer, $form, $notification)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $footer;
         }
 
@@ -3077,19 +3130,41 @@ class SettingsController
         return apply_filters('wpml_translate_string', $footer, "form_{$form->id}_email_template_footer", $package);
     }
 
-    public function translateEmailSubjectLine($subject, $form, $notification)
+    public function translateEmailSubjectLine($subject, $notification, $submittedData, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $subject;
         }
 
         $package = $this->getFormPackage($form);
-        return apply_filters('wpml_translate_string', $subject, "form_{$form->id}_email_subject_line", $package);
+        $feedId = self::$currentNotificationFeedId;
+        $key = $feedId !== null
+            ? "form_{$form->id}_notification_{$feedId}_subject"
+            : "form_{$form->id}_email_subject_line";
+        return apply_filters('wpml_translate_string', $subject, $key, $package);
+    }
+
+    public function translateEmailBody($emailBody, $notification, $submittedData, $form)
+    {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
+            return $emailBody;
+        }
+
+        $package = $this->getFormPackage($form);
+        $feedId = self::$currentNotificationFeedId;
+        $key = $feedId !== null
+            ? "form_{$form->id}_notification_{$feedId}_message"
+            : "form_{$form->id}_email_body";
+        $result = apply_filters('wpml_translate_string', $emailBody, $key, $package);
+        if ($feedId !== null) {
+            self::$currentNotificationFeedId = null;
+        }
+        return $result;
     }
 
     public function translateSubscriptionMessage($message, $formData, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -3099,7 +3174,7 @@ class SettingsController
 
     public function translateRecurringPaymentMessage($message, $formData, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -3109,17 +3184,21 @@ class SettingsController
 
     public function translateSubmissionMessageParse($message, $insertId, $formData, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
         $package = $this->getFormPackage($form);
-        return apply_filters('wpml_translate_string', $message, "form_{$form->id}_submission_message_parse", $package);
+        $feedId = self::$currentNotificationFeedId;
+        $key = $feedId !== null
+            ? "form_{$form->id}_notification_{$feedId}_message"
+            : "form_{$form->id}_submission_message_parse";
+        return apply_filters('wpml_translate_string', $message, $key, $package);
     }
 
     public function translateFormSubmissionMessages($messages, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $messages;
         }
 
