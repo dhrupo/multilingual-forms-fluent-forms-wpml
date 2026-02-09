@@ -320,8 +320,16 @@ class SettingsController
         return $formFields;
     }
 
-    public function removeWpmlSettings($formId)
+    public function removeWpmlSettings()
     {
+        $request = $this->app->request->get();
+        $formId = ArrayHelper::get($request, 'form_id');
+        
+        if (!$formId || !is_numeric($formId)) {
+            wp_send_json_error(__('Invalid form ID.', 'multilingual-forms-fluent-forms-wpml'));
+            return;
+        }
+        
         $this->removeWpmlStrings($formId);
         wp_send_json_success(__('Translations removed successfully.', 'multilingual-forms-fluent-forms-wpml'));
     }
@@ -404,6 +412,16 @@ class SettingsController
         // Extract strings from submit button
         if (isset($form->fields['submitButton'])) {
             $submitButton = json_decode(json_encode($form->fields['submitButton']), true);
+            $submitId = isset($submitButton['uniqElKey']) ? $submitButton['uniqElKey'] : 'submit_button';
+            
+            if (isset($submitButton['settings']['btn_text']) && !empty($submitButton['settings']['btn_text'])) {
+                $extractedFields["{$submitId}->btn_text"] = $submitButton['settings']['btn_text'];
+            }
+            
+            if (isset($submitButton['settings']['button_ui']['text']) && !empty($submitButton['settings']['button_ui']['text'])) {
+                $extractedFields["{$submitId}->button_ui->text"] = $submitButton['settings']['button_ui']['text'];
+            }
+            
             $this->extractFieldStrings($extractedFields, $submitButton, $form->id);
         }
 
@@ -456,34 +474,32 @@ class SettingsController
             return $confirmation;
         }
 
+        if (!is_array($confirmation)) {
+            return $confirmation;
+        }
+
         $package = $this->getFormPackage($form);
 
-        // Check if this is a conditional confirmation (has 'id' field) or default confirmation
-        $confirmationId = isset($confirmation['id']) ? $confirmation['id'] : null;
+        $confirmationId = isset($confirmation['id']) && !empty($confirmation['id']) ? $confirmation['id'] : null;
         
         if ($confirmationId) {
-            // This is a conditional confirmation
             $messageKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_message";
             $customPageKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_custom_page";
             $pageTitleKey = "form_{$form->id}_conditional_confirmation_{$confirmationId}_page_title";
         } else {
-            // This is the default confirmation
             $messageKey = "form_{$form->id}_confirmation_message";
             $customPageKey = "form_{$form->id}_confirmation_custom_page";
             $pageTitleKey = "form_{$form->id}_confirmation_page_title";
         }
 
-        // Translate main confirmation message
         if (!empty($confirmation['messageToShow'])) {
             $confirmation['messageToShow'] = apply_filters('wpml_translate_string', $confirmation['messageToShow'], $messageKey, $package);
         }
 
-        // Translate custom page HTML content
         if (!empty($confirmation['customPageHtml'])) {
             $confirmation['customPageHtml'] = apply_filters('wpml_translate_string', $confirmation['customPageHtml'], $customPageKey, $package);
         }
 
-        // Translate success page title if present
         if (!empty($confirmation['successPageTitle'])) {
             $confirmation['successPageTitle'] = apply_filters('wpml_translate_string', $confirmation['successPageTitle'], $pageTitleKey, $package);
         }
@@ -493,7 +509,7 @@ class SettingsController
     
     public function translateLimitReachedMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -504,7 +520,7 @@ class SettingsController
 
     public function translateFormPendingMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -515,7 +531,7 @@ class SettingsController
     
     public function translateFormExpiredMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -526,7 +542,7 @@ class SettingsController
     
     public function translateFormLoginMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -537,7 +553,7 @@ class SettingsController
     
     public function translateEmptySubmissionMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -548,7 +564,7 @@ class SettingsController
     
     public function translateIpRestrictionMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -559,7 +575,7 @@ class SettingsController
 
     public function translateCountryRestrictionMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -570,7 +586,7 @@ class SettingsController
 
     public function translateKeywordRestrictionMessage($message, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -886,7 +902,7 @@ class SettingsController
 
     public function translatePaymentErrorMessage($message, $submission, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -1036,14 +1052,13 @@ class SettingsController
 
     public function translateValidationMessages($validations, $form, $formData)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $validations;
         }
 
         $package = $this->getFormPackage($form);
         list($rules, $messages) = $validations;
 
-        // Translate validation messages
         foreach ($messages as $key => $message) {
             $translationKey = "form_{$form->id}_validation_" . str_replace('.', '_', (string) $key);
             $messages[$key] = apply_filters('wpml_translate_string', $message, $translationKey, $package);
@@ -1054,7 +1069,7 @@ class SettingsController
 
     public function translateValidationErrorMessage($message, $field, $form)
     {
-        if (!$this->isWpmlEnabledOnForm($form->id)) {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
             return $message;
         }
 
@@ -1533,6 +1548,7 @@ class SettingsController
                 break;
 
             case 'net_promoter_score':
+            case 'net_promoter':
                 if (!empty($field->settings->start_text)) {
                     $fields["{$fieldIdentifier}->start_text"] = $field->settings->start_text;
                 }
@@ -1813,6 +1829,13 @@ class SettingsController
                 }
                 if (!empty($field->settings->description)) {
                     $fields["{$fieldIdentifier}->description"] = $field->settings->description;
+                }
+                break;
+
+            case 'shortcode':
+                // Extract shortcode text
+                if (!empty($field->settings->shortcode)) {
+                    $fields["{$fieldIdentifier}->shortcode"] = $field->settings->shortcode;
                 }
                 break;
         }
@@ -2374,6 +2397,7 @@ class SettingsController
                 break;
 
             case 'net_promoter_score':
+            case 'net_promoter':
                 $startTextKey = "{$fieldName}->start_text";
                 $endTextKey = "{$fieldName}->end_text";
                 if (isset($translations[$startTextKey])) {
@@ -2530,11 +2554,16 @@ class SettingsController
             // For the submit button
             case 'button':
             case 'custom_submit_button':
-                // Update button text
                 if (isset($field['settings']['button_ui']) && isset($field['settings']['button_ui']['text'])) {
                     $buttonTextKey = "{$fieldName}->button_ui->text";
                     if (isset($translations[$buttonTextKey])) {
                         $field['settings']['button_ui']['text'] = $translations[$buttonTextKey];
+                    }
+                }
+                if (isset($field['settings']['btn_text'])) {
+                    $btnTextKey = "{$fieldName}->btn_text";
+                    if (isset($translations[$btnTextKey])) {
+                        $field['settings']['btn_text'] = $translations[$btnTextKey];
                     }
                 }
                 break;
@@ -2667,6 +2696,14 @@ class SettingsController
                     $field['settings']['description'] = $translations[$descriptionKey];
                 }
                 break;
+
+            case 'shortcode':
+                // Update shortcode text
+                $shortcodeKey = "{$fieldName}->shortcode";
+                if (isset($translations[$shortcodeKey])) {
+                    $field['settings']['shortcode'] = $translations[$shortcodeKey];
+                }
+                break;
         }
     }
 
@@ -2677,8 +2714,21 @@ class SettingsController
     
     private function removeWpmlStrings($formId)
     {
-        do_action('wpml_delete_package', $formId, 'Fluent Forms');
-        Helper::setFormMeta($formId, 'ff_wpml', false);
+        if (!$formId || !is_numeric($formId) || $formId <= 0) {
+            return;
+        }
+        
+        if (!$this->isWpmlActive()) {
+            return;
+        }
+        
+        if (function_exists('do_action')) {
+            do_action('wpml_delete_package', $formId, 'Fluent Forms');
+        }
+        
+        if (class_exists('FluentForm\App\Helpers\Helper')) {
+            Helper::setFormMeta($formId, 'ff_wpml', false);
+        }
     }
     
     public function setupLanguageForAjax()
