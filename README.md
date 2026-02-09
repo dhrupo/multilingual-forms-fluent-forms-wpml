@@ -38,6 +38,16 @@ You must have all three plugins active for this integration to function properly
 - Compatible with Fluent Forms Pro features
 - Easy setup and configuration
 
+## Changelog
+
+### 1.0.3
+- Add multiple email notifications support
+- Add PHP 7.4 to 8.3 compatibility
+- Fix PHP notice "Trying to get property 'id' of non-object" when form is passed as array
+
+### 1.0.1
+- Fix object vs array issue (accordion/stdObject)
+
 ## About Fluent Forms
 
 [Fluent Forms](https://wordpress.org/plugins/fluentform/) is a light-weight and fastest Form Builder plugin for WordPress. It helps you create hassle-free contact forms, subscription forms, or any kind of forms you need for your website in minutes.

@@ -2,9 +2,10 @@
 Contributors: dhrupo, pyrobd
 Tags: WPML, Form,Fluentform, Translate, Fluent Forms
 Requires at least: 5.0
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Tested up to PHP: 8.3
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -86,6 +87,11 @@ Install From WordPress Admin Panel:
 
 
 == Changelog ==
+
+= 1.0.2 =
+- Add multiple email notifications support
+- Add PHP 7.4 to 8.3 compatibility
+- Fix PHP notice "Trying to get property 'id' of non-object"
 
 = 1.0.1 =
 - Fix accordion issue with stdObject

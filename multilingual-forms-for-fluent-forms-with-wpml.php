@@ -5,12 +5,13 @@
  * Author: dhrupo, pyrobd
  * Plugin URI: https://github.com/dhrupo/fluent-forms-wpml
  * Author URI: https://github.com/dhrupo/
- * Version: 1.0.1
+ * Version: 1.0.2
  * License: GPLv2 or later
  * Text Domain: multilingual-forms-fluent-forms-wpml
  * Requires at least: 5.0
  * Requires PHP: 7.4
- * Requires Plugins: fluentform
+ * Tested up to PHP: 8.3
+ * Requires Plugins: fluentform, wpml-string-translation, sitepress-multilingual-cms
  */
 
 /**
