@@ -945,7 +945,7 @@ class SettingsController
         }
 
         if (!$options && isset($form->id)) {
-            $formModel = Form::find($form->id);
+            $formModel = $this->getCachedFormModel($form->id);
             if ($formModel) {
                 $formFields = FormFieldsParser::getFields($formModel, true);
                 foreach ((array) $formFields as $formField) {
