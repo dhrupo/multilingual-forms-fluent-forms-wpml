@@ -5,6 +5,7 @@ namespace MultilingualFormsFluentFormsWpml\Controllers;
 use FluentForm\App\Helpers\Helper;
 use FluentForm\App\Models\Form;
 use FluentForm\App\Models\FormMeta;
+use FluentForm\App\Modules\Form\FormDataParser;
 use FluentForm\App\Modules\Form\FormFieldsParser;
 use FluentForm\App\Services\FormBuilder\ShortCodeParser;
 use FluentForm\App\Services\Integrations\GlobalNotificationManager;
@@ -110,6 +111,13 @@ class SettingsController
         add_filter('fluentform/payment_success_title', [$this, 'translatePaymentSuccessTitle'], 10, 3);
         add_filter('fluentform/payment_failed_title', [$this, 'translatePaymentFailedTitle'], 10, 3);
         add_filter('fluentform/payment_error_message', [$this, 'translatePaymentErrorMessage'], 10, 3);
+        add_filter('fluentform/insert_response_data', [$this, 'normalizeTranslatedPaymentSelections'], 20, 3);
+        add_filter('fluentform/response_render_select', [$this, 'translateFieldResponseOutput'], 20, 4);
+        add_filter('fluentform/response_render_input_radio', [$this, 'translateFieldResponseOutput'], 20, 4);
+        add_filter('fluentform/response_render_input_checkbox', [$this, 'translateFieldResponseOutput'], 20, 4);
+        add_filter('fluentform/response_render_multi_payment_component', [$this, 'translateFieldResponseOutput'], 20, 4);
+        add_filter('fluentform/response_render_subscription_payment_component', [$this, 'translateFieldResponseOutput'], 20, 4);
+        add_filter('fluentform/response_render_tabular_grid', [$this, 'translateFieldResponseOutput'], 20, 4);
         add_filter(
             'fluentform/validate_input_item_multi_payment_component',
             [$this, 'validateTranslatedPaymentInput'],
@@ -128,6 +136,7 @@ class SettingsController
         // Quiz translation filters
         add_filter('fluentform/quiz_score_value', [$this, 'translateQuizScoreValue'], 10, 4);
         add_filter('fluentform/quiz_no_grade_label', [$this, 'translateQuizNoGradeLabel'], 10, 2);
+        add_filter('fluentform/quiz_result_table_html', [$this, 'translateQuizResultTableHtml'], 20, 5);
 
         // Square specific
         add_filter('fluentform/square_payment_redirect_message', [$this, 'translateSquarePaymentRedirectMessage'], 10, 3);
@@ -182,6 +191,7 @@ class SettingsController
         add_filter('fluentform/all_data_shortcode_html', [$this, 'translateAllDataShortcode'],10, 4);
         add_filter('fluentform/landing_vars', [$this, 'translateLandingVars'], 10, 2);
         add_filter('fluentform/front_end_entry_view_settings', [$this, 'translateFrontEndEntryViewSettings'], 10, 2);
+        add_filter('do_shortcode_tag', [$this, 'translateSurveyShortcodeOutput'], 20, 4);
 
         add_filter('fluentform_pdf/check_wpml_active', [$this, 'isWpmlActive'], 10, 1);
         add_filter('fluentform_pdf/get_current_language', [$this, 'getCurrentWpmlLanguage'], 10, 1);
@@ -575,6 +585,77 @@ class SettingsController
         return $error;
     }
 
+    public function normalizeTranslatedPaymentSelections($formData, $formId, $inputConfigs)
+    {
+        if (!$formId || !$this->isWpmlEnabledOnForm($formId) || !is_array($formData) || !is_array($inputConfigs)) {
+            return $formData;
+        }
+
+        $form = Form::find($formId);
+        if (!$form) {
+            return $formData;
+        }
+
+        foreach ($inputConfigs as $inputConfig) {
+            if (ArrayHelper::get($inputConfig, 'element') !== 'multi_payment_component') {
+                continue;
+            }
+
+            $fieldName = ArrayHelper::get($inputConfig, 'raw.attributes.name');
+            if (!$fieldName || !array_key_exists($fieldName, $formData)) {
+                continue;
+            }
+
+            $translationMap = $this->getPaymentOptionTranslatedToOriginalMap($inputConfig, $form);
+            if (!$translationMap) {
+                continue;
+            }
+
+            $submittedValue = $formData[$fieldName];
+            if (is_array($submittedValue)) {
+                $formData[$fieldName] = array_map(function ($value) use ($translationMap) {
+                    $value = sanitize_text_field((string) $value);
+                    return ArrayHelper::get($translationMap, $value, $value);
+                }, $submittedValue);
+                continue;
+            }
+
+            $submittedValue = sanitize_text_field((string) $submittedValue);
+            $formData[$fieldName] = ArrayHelper::get($translationMap, $submittedValue, $submittedValue);
+        }
+
+        return $formData;
+    }
+
+    public function translateFieldResponseOutput($response, $field, $formId, $isHtml = false)
+    {
+        if (!$formId || !$this->isWpmlEnabledOnForm($formId) || !is_array($field)) {
+            return $response;
+        }
+
+        $form = Form::find($formId);
+        if (!$form) {
+            return $response;
+        }
+
+        $element = ArrayHelper::get($field, 'element');
+
+        if ($element === 'subscription_payment_component') {
+            $response = $this->maybeResolveSubscriptionPlanName($response, $field);
+        }
+
+        if ($element === 'tabular_grid') {
+            return $this->translateTabularGridResponse($response, $field, $form);
+        }
+
+        $labelMap = $this->getTranslatedChoiceLabelMap($field, $form);
+        if (!$labelMap) {
+            return $response;
+        }
+
+        return $this->applyChoiceLabelMapToResponse($response, $labelMap);
+    }
+
     private function getAcceptedPaymentOptionLabels($field, $form)
     {
         $options = ArrayHelper::get($field, 'raw.settings.pricing_options', []);
@@ -631,6 +712,302 @@ class SettingsController
         }
 
         return array_values(array_unique($accepted));
+    }
+
+    private function getTranslatedChoiceLabelMap($field, $form)
+    {
+        $element = ArrayHelper::get($field, 'element');
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+        if (!$fieldName) {
+            return [];
+        }
+
+        if ($element === 'multi_payment_component') {
+            return $this->getTranslatedPaymentOptionLabelMap($field, $form);
+        }
+
+        if ($element === 'subscription_payment_component') {
+            return $this->getTranslatedSubscriptionOptionLabelMap($field, $form);
+        }
+
+        $options = ArrayHelper::get($field, 'options', []);
+        if (!$options) {
+            $options = Helper::advancedOptionsValueLabelMap(
+                (array) ArrayHelper::get($field, 'raw.settings.advanced_options', [])
+            );
+        }
+
+        if (!$options || !is_array($options)) {
+            return [];
+        }
+
+        $package = $this->getFormPackage($form);
+        $translatedMap = [];
+
+        foreach ($options as $optionValue => $optionLabel) {
+            $originalLabel = sanitize_text_field((string) $optionLabel);
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            $translationKey = "{$fieldName}->Options->{$optionValue}";
+            $translatedLabel = apply_filters('wpml_translate_string', $originalLabel, $translationKey, $package);
+            $translatedLabel = sanitize_text_field((string) $translatedLabel);
+
+            if ($translatedLabel !== '' && $translatedLabel !== $originalLabel) {
+                $translatedMap[$originalLabel] = $translatedLabel;
+            }
+        }
+
+        return $translatedMap;
+    }
+
+    private function getTranslatedPaymentOptionLabelMap($field, $form)
+    {
+        $options = (array) ArrayHelper::get($field, 'raw.settings.pricing_options', []);
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+        $package = $this->getFormPackage($form);
+        $translatedMap = [];
+
+        foreach ($options as $index => $option) {
+            $originalLabel = sanitize_text_field((string) ArrayHelper::get($option, 'label'));
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            $translationKey = "{$fieldName}->pricing_options->{$index}";
+            $translatedLabel = apply_filters('wpml_translate_string', $originalLabel, $translationKey, $package);
+            $translatedLabel = sanitize_text_field((string) $translatedLabel);
+
+            if ($translatedLabel !== '' && $translatedLabel !== $originalLabel) {
+                $translatedMap[$originalLabel] = $translatedLabel;
+            }
+        }
+
+        return $translatedMap;
+    }
+
+    private function getTranslatedSubscriptionOptionLabelMap($field, $form)
+    {
+        $options = (array) ArrayHelper::get($field, 'raw.settings.subscription_options', []);
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+        $package = $this->getFormPackage($form);
+        $translatedMap = [];
+
+        foreach ($options as $index => $option) {
+            $originalLabel = sanitize_text_field((string) ArrayHelper::get($option, 'name'));
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            $translationKey = "{$fieldName}->subscription_options->{$index}->name";
+            $translatedLabel = apply_filters('wpml_translate_string', $originalLabel, $translationKey, $package);
+            $translatedLabel = sanitize_text_field((string) $translatedLabel);
+
+            if ($translatedLabel !== '' && $translatedLabel !== $originalLabel) {
+                $translatedMap[$originalLabel] = $translatedLabel;
+            }
+        }
+
+        return $translatedMap;
+    }
+
+    private function applyChoiceLabelMapToResponse($response, $labelMap)
+    {
+        if (!$labelMap) {
+            return $response;
+        }
+
+        if (is_array($response)) {
+            return array_map(function ($item) use ($labelMap) {
+                $item = (string) $item;
+                return isset($labelMap[$item]) ? $labelMap[$item] : $item;
+            }, $response);
+        }
+
+        if (!is_string($response)) {
+            return $response;
+        }
+
+        $safeMap = $this->buildEscapedReplacementMap($labelMap);
+
+        if (isset($safeMap[$response])) {
+            return $safeMap[$response];
+        }
+
+        return strtr($response, $safeMap);
+    }
+
+    private function buildEscapedReplacementMap($labelMap)
+    {
+        $safeMap = [];
+
+        foreach ($labelMap as $originalLabel => $translatedLabel) {
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            $safeMap[$originalLabel] = $translatedLabel;
+
+            $escapedOriginal = esc_html($originalLabel);
+            $escapedTranslated = esc_html($translatedLabel);
+
+            if (!isset($safeMap[$escapedOriginal])) {
+                $safeMap[$escapedOriginal] = $escapedTranslated;
+            }
+        }
+
+        return $safeMap;
+    }
+
+    private function maybeResolveSubscriptionPlanName($response, $field)
+    {
+        if (is_array($response) || is_object($response)) {
+            return $response;
+        }
+
+        $responseKey = (string) $response;
+        $planName = ArrayHelper::get($field, 'raw.settings.subscription_options.' . $responseKey . '.name');
+
+        return $planName ? $planName : $response;
+    }
+
+    private function translateTabularGridResponse($response, $field, $form)
+    {
+        if (!is_string($response) || $response === __('....', 'fluentform')) {
+            return $response;
+        }
+
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+        if (!$fieldName) {
+            return $response;
+        }
+
+        $package = $this->getFormPackage($form);
+        $translationMap = [];
+        $gridRows = (array) ArrayHelper::get($field, 'raw.settings.grid_rows', []);
+        $gridColumns = (array) ArrayHelper::get($field, 'raw.settings.grid_columns', []);
+
+        foreach ($gridRows as $rowKey => $rowLabel) {
+            $rowLabel = (string) $rowLabel;
+            $translated = apply_filters('wpml_translate_string', $rowLabel, "{$fieldName}->Grid Rows->{$rowKey}", $package);
+            if ($translated !== $rowLabel) {
+                $translationMap[$rowLabel] = $translated;
+            }
+        }
+
+        foreach ($gridColumns as $columnKey => $columnLabel) {
+            $columnLabel = (string) $columnLabel;
+            $translated = apply_filters('wpml_translate_string', $columnLabel, "{$fieldName}->Grid Columns->{$columnKey}", $package);
+            if ($translated !== $columnLabel) {
+                $translationMap[$columnLabel] = $translated;
+            }
+        }
+
+        if (!$translationMap) {
+            return $response;
+        }
+
+        return strtr($response, $this->buildEscapedReplacementMap($translationMap));
+    }
+
+    private function getPaymentOptionTranslatedToOriginalMap($field, $form)
+    {
+        $options = ArrayHelper::get($field, 'raw.settings.pricing_options', []);
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+
+        if (!$fieldName) {
+            return [];
+        }
+
+        if (!$options && isset($form->id)) {
+            $formModel = Form::find($form->id);
+            if ($formModel) {
+                $formFields = FormFieldsParser::getFields($formModel, true);
+                foreach ((array) $formFields as $formField) {
+                    if (ArrayHelper::get($formField, 'element') !== 'multi_payment_component') {
+                        continue;
+                    }
+
+                    if (ArrayHelper::get($formField, 'attributes.name') !== $fieldName) {
+                        continue;
+                    }
+
+                    $options = (array) ArrayHelper::get($formField, 'settings.pricing_options', []);
+                    break;
+                }
+            }
+        }
+
+        if (!$options) {
+            return [];
+        }
+
+        $map = [];
+
+        foreach ($options as $index => $option) {
+            $originalLabel = sanitize_text_field((string) ArrayHelper::get($option, 'label'));
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            foreach ($this->getTranslatedPricingOptionLabels($form, $fieldName, $index, $originalLabel) as $translatedLabel) {
+                $map[$translatedLabel] = $originalLabel;
+            }
+        }
+
+        return $map;
+    }
+
+    private function getTranslatedPricingOptionLabels($form, $fieldName, $index, $originalLabel)
+    {
+        $originalLabel = sanitize_text_field((string) $originalLabel);
+
+        if ($originalLabel === '') {
+            return [];
+        }
+
+        $context = 'fluent-forms-' . $form->id;
+        $stringName = "{$fieldName}->pricing_options->{$index}";
+        $translatedLabels = [];
+
+        if (has_filter('wpml_translate_single_string')) {
+            $languages = apply_filters('wpml_active_languages', null, ['skip_missing' => 0]);
+
+            if (is_array($languages) && $languages) {
+                foreach (array_keys($languages) as $language) {
+                    $translated = apply_filters(
+                        'wpml_translate_single_string',
+                        $originalLabel,
+                        $context,
+                        $stringName,
+                        $language
+                    );
+
+                    $translated = sanitize_text_field((string) $translated);
+                    if ($translated !== '' && $translated !== $originalLabel) {
+                        $translatedLabels[$translated] = $translated;
+                    }
+                }
+
+                return array_values($translatedLabels);
+            }
+        }
+
+        $package = $this->getFormPackage($form);
+        $translated = apply_filters(
+            'wpml_translate_string',
+            $originalLabel,
+            $stringName,
+            $package
+        );
+
+        $translated = sanitize_text_field((string) $translated);
+        if ($translated !== '' && $translated !== $originalLabel) {
+            $translatedLabels[$translated] = $translated;
+        }
+
+        return array_values($translatedLabels);
     }
 
     private function isPaymentItemInvalidError($error)
@@ -2038,11 +2415,6 @@ class SettingsController
                             $fields["{$fieldIdentifier}->subscription_options->{$index}->name"] = $option->name;
                         }
 
-                        // Extract billing interval (if it's text and not a code)
-                        if (!empty($option->billing_interval)) {
-                            $fields["{$fieldIdentifier}->subscription_options->{$index}->billing_interval"] = $option->billing_interval;
-                        }
-
                         // Extract plan features (if they exist)
                         if (!empty($option->plan_features) && is_array($option->plan_features)) {
                             foreach ($option->plan_features as $featureIndex => $feature) {
@@ -3202,12 +3574,6 @@ class SettingsController
                             $option['name'] = $translations[$nameKey];
                         }
 
-                        // Update billing interval (if it's text and not a code)
-                        $intervalKey = "{$fieldName}->subscription_options->{$index}->billing_interval";
-                        if (isset($translations[$intervalKey])) {
-                            $option['billing_interval'] = $translations[$intervalKey];
-                        }
-
                         // Update plan features (if they exist)
                         if (isset($option['plan_features']) && is_array($option['plan_features'])) {
                             foreach ($option['plan_features'] as $featureIndex => &$feature) {
@@ -3584,74 +3950,33 @@ class SettingsController
         if (!$form) {
             return $html;
         }
-
-        $package = $this->getFormPackage($form);
-
-        // Translate field labels and values
-        $translatedLabels = [];
-        $translatedValues = [];
-
-        foreach ($inputLabels as $inputKey => $label) {
-            // Try different translation keys in order of priority
-            $translationKeys = [
-                "{$inputKey}->admin_label",
-                "{$inputKey}->Label"
-            ];
-
-            $translatedLabel = $label; // Default to original
-
-            // Try each translation key and use the first one that returns a different value
-            foreach ($translationKeys as $translationKey) {
-                $translated = apply_filters('wpml_translate_string', $label, $translationKey, $package);
-
-                // If we got a different value back, it means there's a translation available
-                if ($translated !== $label) {
-                    $translatedLabel = $translated;
-                    break; // Use the first available translation
-                }
-            }
-
-            $translatedLabels[$inputKey] = $translatedLabel;
-
-            // Translate value if applicable
-            if (array_key_exists($inputKey, $response->user_inputs)) {
-                $value = $response->user_inputs[$inputKey];
-
-                // Only translate select/radio/checkbox option values
-                if (isset($formFields[$inputKey]) &&
-                    in_array($formFields[$inputKey]['element'], ['select', 'radio', 'checkbox']) &&
-                    is_string($value)) {
-
-                    $optionKey = "{$inputKey}->Options->{$value}";
-                    $translatedValue = apply_filters('wpml_translate_string', $value, $optionKey, $package);
-
-                    // Only save if actually different (translated)
-                    if ($translatedValue !== $value) {
-                        $translatedValues[$inputKey] = $translatedValue;
-                    }
-                }
-            }
-        }
-
-        // Rebuild the HTML with translated labels and values
         $newHtml = '<table class="ff_all_data" width="600" cellpadding="0" cellspacing="0"><tbody>';
+        $rawResponse = is_string($response->response) ? json_decode($response->response, true) : [];
 
         foreach ($inputLabels as $inputKey => $label) {
             if (array_key_exists($inputKey, $response->user_inputs) && '' !== ArrayHelper::get($response->user_inputs, $inputKey)) {
                 $data = ArrayHelper::get($response->user_inputs, $inputKey);
+                $field = ArrayHelper::get($formFields, $inputKey, []);
+                $element = ArrayHelper::get($field, 'element');
+                $translatedLabel = $this->translateInputLabel($inputKey, $label, $form);
 
-                // Skip arrays and objects
+                if ($field && array_key_exists($inputKey, $rawResponse) && $element) {
+                    $data = apply_filters(
+                        'fluentform/response_render_' . $element,
+                        $rawResponse[$inputKey],
+                        $field,
+                        $formId,
+                        true
+                    );
+                }
+
                 if (is_array($data) || is_object($data)) {
+                    $data = FormDataParser::formatValue($data);
+                }
+
+                if ($data === '' || $data === null) {
                     continue;
                 }
-
-                // Use translated value if available
-                if (isset($translatedValues[$inputKey])) {
-                    $data = $translatedValues[$inputKey];
-                }
-
-                // Use translated label
-                $translatedLabel = isset($translatedLabels[$inputKey]) ? $translatedLabels[$inputKey] : $label;
 
                 $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . $translatedLabel . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . $data . '</td></tr>';
             }
@@ -3660,6 +3985,93 @@ class SettingsController
         $newHtml .= '</tbody></table>';
 
         return $newHtml;
+    }
+
+    public function translateSurveyShortcodeOutput($output, $tag, $attr, $m)
+    {
+        if ($tag !== 'fluentform_survey') {
+            return $output;
+        }
+
+        $formId = absint(ArrayHelper::get($attr, 'form_id'));
+        if (!$formId || !$this->isWpmlEnabledOnForm($formId)) {
+            return $output;
+        }
+
+        $form = wpFluent()->table('fluentform_forms')->find($formId);
+        if (!$form) {
+            return $output;
+        }
+
+        $fields = FormFieldsParser::getInputs($form, ['element', 'options', 'label', 'raw']);
+        $translationMap = [];
+
+        foreach ($fields as $fieldName => $field) {
+            $originalLabel = ArrayHelper::get($field, 'label', '');
+            $translatedLabel = $this->translateInputLabel($fieldName, $originalLabel, $form);
+
+            if ($translatedLabel && $translatedLabel !== $originalLabel) {
+                $translationMap[$originalLabel] = $translatedLabel;
+            }
+
+            $translationMap = array_merge($translationMap, $this->getTranslatedChoiceLabelMap($field, $form));
+        }
+
+        if (!$translationMap) {
+            return $output;
+        }
+
+        return strtr($output, $this->buildEscapedReplacementMap($translationMap));
+    }
+
+    public function translateQuizResultTableHtml($html, $form, $results, $quizSettings, $entry)
+    {
+        if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
+            return $html;
+        }
+
+        $inputs = FormFieldsParser::getInputs($form, ['element', 'label', 'options', 'raw']);
+        $translationMap = [];
+
+        foreach ($results as $fieldName => $result) {
+            $field = ArrayHelper::get($inputs, $fieldName, []);
+            if (!$field) {
+                continue;
+            }
+
+            $originalLabel = ArrayHelper::get($result, 'label', ArrayHelper::get($field, 'label', ''));
+            $translatedLabel = $this->translateInputLabel($fieldName, $originalLabel, $form);
+
+            if ($translatedLabel && $translatedLabel !== $originalLabel) {
+                $translationMap[$originalLabel] = $translatedLabel;
+            }
+
+            $translationMap = array_merge($translationMap, $this->getTranslatedChoiceLabelMap($field, $form));
+        }
+
+        if (!$translationMap) {
+            return $html;
+        }
+
+        return strtr($html, $this->buildEscapedReplacementMap($translationMap));
+    }
+
+    private function translateInputLabel($inputKey, $label, $form)
+    {
+        if ($label === '') {
+            return $label;
+        }
+
+        $package = $this->getFormPackage($form);
+
+        foreach (["{$inputKey}->admin_label", "{$inputKey}->Label"] as $translationKey) {
+            $translated = apply_filters('wpml_translate_string', $label, $translationKey, $package);
+            if ($translated !== $label) {
+                return $translated;
+            }
+        }
+
+        return $label;
     }
     
     protected function isWpmlActive()
