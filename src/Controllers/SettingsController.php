@@ -29,6 +29,8 @@ class SettingsController
 
     private static $conditionalConfirmationMetaCache = [];
 
+    private static $formModelCache = [];
+
     private static $legacyTranslationKeyMap = [
         'modal_button_text' => ['modal_text'],
         'optin_confirmation_message' => ['double_optin_confirmation'],
@@ -591,7 +593,7 @@ class SettingsController
             return $formData;
         }
 
-        $form = Form::find($formId);
+        $form = $this->getCachedFormModel($formId);
         if (!$form) {
             return $formData;
         }
@@ -633,7 +635,7 @@ class SettingsController
             return $response;
         }
 
-        $form = Form::find($formId);
+        $form = $this->getCachedFormModel($formId);
         if (!$form) {
             return $response;
         }
@@ -666,7 +668,7 @@ class SettingsController
         }
 
         if (!$options && isset($form->id)) {
-            $formModel = Form::find($form->id);
+            $formModel = $this->getCachedFormModel($form->id);
             if ($formModel) {
                 $formFields = FormFieldsParser::getFields($formModel, true);
                 foreach ((array) $formFields as $formField) {
@@ -836,6 +838,28 @@ class SettingsController
         }
 
         return strtr($response, $safeMap);
+    }
+
+    private function buildHtmlReplacementMap($labelMap)
+    {
+        $safeMap = [];
+
+        foreach ($labelMap as $originalLabel => $translatedLabel) {
+            if ($originalLabel === '') {
+                continue;
+            }
+
+            $escapedTranslated = esc_html($translatedLabel);
+
+            $safeMap[$originalLabel] = $escapedTranslated;
+
+            $escapedOriginal = esc_html($originalLabel);
+            if (!isset($safeMap[$escapedOriginal])) {
+                $safeMap[$escapedOriginal] = $escapedTranslated;
+            }
+        }
+
+        return $safeMap;
     }
 
     private function buildEscapedReplacementMap($labelMap)
@@ -3946,7 +3970,7 @@ class SettingsController
             return $html;
         }
 
-        $form = Form::find($formId);
+        $form = $this->getCachedFormModel($formId);
         if (!$form) {
             return $html;
         }
@@ -3978,7 +4002,7 @@ class SettingsController
                     continue;
                 }
 
-                $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . $translatedLabel . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . $data . '</td></tr>';
+                $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . esc_html($translatedLabel) . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . $data . '</td></tr>';
             }
         }
 
@@ -3998,7 +4022,7 @@ class SettingsController
             return $output;
         }
 
-        $form = wpFluent()->table('fluentform_forms')->find($formId);
+        $form = $this->getCachedFormModel($formId);
         if (!$form) {
             return $output;
         }
@@ -4021,7 +4045,7 @@ class SettingsController
             return $output;
         }
 
-        return strtr($output, $this->buildEscapedReplacementMap($translationMap));
+        return strtr($output, $this->buildHtmlReplacementMap($translationMap));
     }
 
     public function translateQuizResultTableHtml($html, $form, $results, $quizSettings, $entry)
@@ -4053,7 +4077,7 @@ class SettingsController
             return $html;
         }
 
-        return strtr($html, $this->buildEscapedReplacementMap($translationMap));
+        return strtr($html, $this->buildHtmlReplacementMap($translationMap));
     }
 
     private function translateInputLabel($inputKey, $label, $form)
@@ -4066,7 +4090,8 @@ class SettingsController
 
         foreach (["{$inputKey}->admin_label", "{$inputKey}->Label"] as $translationKey) {
             $translated = apply_filters('wpml_translate_string', $label, $translationKey, $package);
-            if ($translated !== $label) {
+            $translated = sanitize_text_field((string) $translated);
+            if ($translated !== '' && $translated !== $label) {
                 return $translated;
             }
         }
@@ -4086,6 +4111,20 @@ class SettingsController
         }
 
         return apply_filters('wpml_current_language', null);
+    }
+
+    private function getCachedFormModel($formId)
+    {
+        $formId = absint($formId);
+        if (!$formId) {
+            return null;
+        }
+
+        if (!array_key_exists($formId, static::$formModelCache)) {
+            static::$formModelCache[$formId] = Form::find($formId);
+        }
+
+        return static::$formModelCache[$formId];
     }
 
     public function addLanguageToUrl($url)
