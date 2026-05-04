@@ -4002,7 +4002,7 @@ class SettingsController
                     continue;
                 }
 
-                $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . esc_html($translatedLabel) . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . $data . '</td></tr>';
+                $newHtml .= '<tr class="field-label"><th style="padding: 6px 12px; background-color: #f8f8f8; text-align: left;"><strong>' . esc_html($translatedLabel) . '</strong></th></tr><tr class="field-value"><td style="padding: 6px 12px 12px 12px;">' . wp_kses_post($data) . '</td></tr>';
             }
         }
 
