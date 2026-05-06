@@ -39,6 +39,8 @@ class SettingsController
     private static $adminApprovalDeclinedEmailContext = null;
 
     private static $currentDoubleOptinContext = null;
+
+    private static $entryConfirmationLanguageContext = null;
     private static $legacyTranslationKeyMap = [
         'modal_button_text' => ['modal_text'],
         'optin_confirmation_message' => ['double_optin_confirmation'],
@@ -98,6 +100,7 @@ class SettingsController
         add_filter('fluentform/admin_approval_messages', [$this, 'translateAdminApprovalMessages'], 10, 3);
         add_filter('fluentform/admin_approval_confirmation_message', [$this, 'translateAdminApprovalConfirmationMessage'], 10, 3);
         add_action('fluentform/entry_confirmation', [$this, 'setSubmissionLanguageForEntryConfirmation'], 0, 1);
+        add_action('shutdown', [$this, 'restoreEntryConfirmationLanguage'], 0);
         add_action('fluentform/before_form_actions_processing', [$this, 'prepareDoubleOptinContext'], 9, 3);
         add_action('fluentform/before_form_actions_processing', [$this, 'clearDoubleOptinContext'], 11, 3);
         add_action('fluentform/after_submission_status_update', [$this, 'prepareAdminApprovalDeclinedEmailContext'], 9, 2);
@@ -917,13 +920,9 @@ class SettingsController
             if ($originalLabel !== '') {
                 $accepted[] = $originalLabel;
             }
-
-            foreach ($this->getTranslatedPricingOptionLabels($form, $fieldName, $index, $originalLabel) as $translatedLabel) {
-                if ($translatedLabel !== '') {
-                    $accepted[] = $translatedLabel;
-                }
-            }
         }
+
+        $accepted = array_merge($accepted, $this->getAcceptedTranslatedPaymentOptionLabels($field, $form));
 
         return array_values(array_unique($accepted));
     }
@@ -1180,6 +1179,7 @@ class SettingsController
         }
 
         $map = [];
+        $ambiguousLabels = [];
 
         foreach ($options as $index => $option) {
             $originalLabel = sanitize_text_field((string) ArrayHelper::get($option, 'label'));
@@ -1188,6 +1188,16 @@ class SettingsController
             }
 
             foreach ($this->getTranslatedPricingOptionLabels($form, $fieldName, $index, $originalLabel) as $translatedLabel) {
+                if (isset($ambiguousLabels[$translatedLabel])) {
+                    continue;
+                }
+
+                if (isset($map[$translatedLabel]) && $map[$translatedLabel] !== $originalLabel) {
+                    unset($map[$translatedLabel]);
+                    $ambiguousLabels[$translatedLabel] = true;
+                    continue;
+                }
+
                 $map[$translatedLabel] = $originalLabel;
             }
         }
@@ -1244,6 +1254,17 @@ class SettingsController
         }
 
         return array_values($translatedLabels);
+    }
+
+    private function getAcceptedTranslatedPaymentOptionLabels($field, $form)
+    {
+        $translationMap = $this->getPaymentOptionTranslatedToOriginalMap($field, $form);
+
+        if (!$translationMap) {
+            return [];
+        }
+
+        return array_keys($translationMap);
     }
 
     public function translatePaymentMessage($message, $formData, $form)
@@ -1492,6 +1513,8 @@ class SettingsController
 
     public function setSubmissionLanguageForEntryConfirmation($data)
     {
+        self::$entryConfirmationLanguageContext = null;
+
         $formId = absint(ArrayHelper::get((array) $data, 'ff_landing'));
         $hash = sanitize_text_field((string) ArrayHelper::get((array) $data, 'entry_confirmation'));
 
@@ -1523,7 +1546,28 @@ class SettingsController
         $currentLanguage = $this->getCurrentWpmlLanguage();
 
         if ($language && $language !== $currentLanguage) {
+            self::$entryConfirmationLanguageContext = [
+                'language'          => $language,
+                'previous_language' => $currentLanguage
+            ];
             do_action('wpml_switch_language', $language);
+        }
+    }
+
+    public function restoreEntryConfirmationLanguage()
+    {
+        $context = self::$entryConfirmationLanguageContext;
+        self::$entryConfirmationLanguageContext = null;
+
+        if (!$context) {
+            return;
+        }
+
+        $previousLanguage = ArrayHelper::get($context, 'previous_language');
+        $submissionLanguage = ArrayHelper::get($context, 'language');
+
+        if ($previousLanguage && $previousLanguage !== $submissionLanguage) {
+            do_action('wpml_switch_language', $previousLanguage);
         }
     }
 
