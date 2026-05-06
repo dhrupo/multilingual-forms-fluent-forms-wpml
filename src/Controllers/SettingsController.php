@@ -5369,7 +5369,7 @@ class SettingsController
                 $message = $templateMessage;
             }
             return $this->translateNotificationOutput($message, $key, $package, false);
-        } elseif (self::$currentDoubleOptinContext && ArrayHelper::get(self::$currentDoubleOptinContext, 'form.id') == $form->id) {
+        } elseif ($this->isCurrentDoubleOptinForm($form)) {
             $translatedDoubleOptinMessage = $this->translateDoubleOptinRuntimeMessage($message, $form);
             if ($translatedDoubleOptinMessage !== null) {
                 return $translatedDoubleOptinMessage;
@@ -5381,6 +5381,19 @@ class SettingsController
         }
 
         return $this->translateWithKeyFallback($message, $package, $key);
+    }
+
+    private function isCurrentDoubleOptinForm($form)
+    {
+        if (!self::$currentDoubleOptinContext || !is_object($form) || !isset($form->id)) {
+            return false;
+        }
+
+        $contextForm = ArrayHelper::get(self::$currentDoubleOptinContext, 'form');
+
+        return is_object($contextForm)
+            && isset($contextForm->id)
+            && (int) $contextForm->id === (int) $form->id;
     }
 
     private function translateDoubleOptinRuntimeMessage($message, $form)
