@@ -110,6 +110,12 @@ class SettingsController
         add_filter('fluentform/payment_success_title', [$this, 'translatePaymentSuccessTitle'], 10, 3);
         add_filter('fluentform/payment_failed_title', [$this, 'translatePaymentFailedTitle'], 10, 3);
         add_filter('fluentform/payment_error_message', [$this, 'translatePaymentErrorMessage'], 10, 3);
+        add_filter(
+            'fluentform/validate_input_item_multi_payment_component',
+            [$this, 'validateTranslatedPaymentInput'],
+            20,
+            6
+        );
 
         // Pro-only payment hooks
         add_filter('fluentform/payment_pending_title', [$this, 'translatePaymentPendingTitle'], 10, 3);
@@ -514,6 +520,132 @@ class SettingsController
         }
         
         return $form;
+    }
+
+    public function validateTranslatedPaymentInput($error, $field, $formData, $fields, $form, $errors)
+    {
+        if (
+            !$error ||
+            !$this->isPaymentItemInvalidError($error) ||
+            !is_object($form) ||
+            !isset($form->id) ||
+            !$this->isWpmlEnabledOnForm($form->id)
+        ) {
+            return $error;
+        }
+
+        $fieldName = ArrayHelper::get($field, 'name', ArrayHelper::get($field, 'raw.attributes.name'));
+        if (!$fieldName) {
+            return $error;
+        }
+
+        $submitted = ArrayHelper::get($formData, $fieldName);
+        if ($submitted === null || $submitted === '' || $submitted === []) {
+            return $error;
+        }
+
+        $fieldType = ArrayHelper::get($field, 'raw.attributes.type');
+        if (!in_array($fieldType, ['radio', 'select', 'checkbox'], true)) {
+            return $error;
+        }
+
+        $acceptedLabels = $this->getAcceptedPaymentOptionLabels($field, $form);
+        if (!$acceptedLabels) {
+            return $error;
+        }
+
+        if (in_array($fieldType, ['radio', 'select'], true)) {
+            $selected = sanitize_text_field((string) $submitted);
+            if (in_array($selected, $acceptedLabels, true)) {
+                return '';
+            }
+
+            return $error;
+        }
+
+        $submittedValues = array_map(function ($item) {
+            return sanitize_text_field((string) $item);
+        }, (array) $submitted);
+
+        $invalidValues = array_diff($submittedValues, $acceptedLabels);
+        if (!$invalidValues) {
+            return '';
+        }
+
+        return $error;
+    }
+
+    private function getAcceptedPaymentOptionLabels($field, $form)
+    {
+        $options = ArrayHelper::get($field, 'raw.settings.pricing_options', []);
+        $fieldName = ArrayHelper::get($field, 'raw.attributes.name');
+
+        if (!$fieldName) {
+            return [];
+        }
+
+        if (!$options && isset($form->id)) {
+            $formModel = Form::find($form->id);
+            if ($formModel) {
+                $formFields = FormFieldsParser::getFields($formModel, true);
+                foreach ((array) $formFields as $formField) {
+                    if (ArrayHelper::get($formField, 'element') !== 'multi_payment_component') {
+                        continue;
+                    }
+
+                    if (ArrayHelper::get($formField, 'attributes.name') !== $fieldName) {
+                        continue;
+                    }
+
+                    $options = (array) ArrayHelper::get($formField, 'settings.pricing_options', []);
+                    break;
+                }
+            }
+        }
+
+        if (!$options) {
+            return [];
+        }
+
+        $package = $this->getFormPackage($form);
+        $accepted = [];
+
+        foreach ($options as $index => $option) {
+            $originalLabel = sanitize_text_field((string) ArrayHelper::get($option, 'label'));
+            if ($originalLabel !== '') {
+                $accepted[] = $originalLabel;
+            }
+
+            $translationKey = "{$fieldName}->pricing_options->{$index}";
+            $translatedLabel = apply_filters(
+                'wpml_translate_string',
+                $originalLabel,
+                $translationKey,
+                $package
+            );
+
+            $translatedLabel = sanitize_text_field((string) $translatedLabel);
+            if ($translatedLabel !== '') {
+                $accepted[] = $translatedLabel;
+            }
+        }
+
+        return array_values(array_unique($accepted));
+    }
+
+    private function isPaymentItemInvalidError($error)
+    {
+        if (!is_string($error) || $error === '') {
+            return false;
+        }
+
+        $defaultError = __('This payment item is invalid', 'fluentform');
+        if ($error === $defaultError) {
+            return true;
+        }
+
+        // Backward compatibility for environments where the translated string source differs.
+        return $error === 'This payment item is invalid';
     }
     
     private function buildPaymentLabelTranslationMap($originalFields, $translatedFields)
@@ -3358,37 +3490,58 @@ class SettingsController
         elseif (isset($_COOKIE['_icl_current_language'])) {
             $language = sanitize_text_field(wp_unslash($_COOKIE['_icl_current_language']));
         }
+        // If still no language, try submitted form referer field.
+        elseif (isset($request['data'])) {
+            parse_str((string) $request['data'], $parsedData);
+            if (!empty($parsedData['_wp_http_referer'])) {
+                $language = $this->extractValidLanguageFromUrl($parsedData['_wp_http_referer']);
+            }
+        }
         // If still no language, try referrer URL for clues
         elseif (isset($_SERVER['HTTP_REFERER'])) {
             $referer = esc_url_raw(wp_unslash($_SERVER['HTTP_REFERER']));
-
-            // Check for directory-based language in referer URL
-            if (preg_match('~^https?://[^/]+/([a-z]{2})(/|$)~i', $referer, $matches)) {
-                $possibleLang = $matches[1];
-
-                // Verify this is a valid WPML language
-                $activeLanguages = apply_filters('wpml_active_languages', []);
-                if (!empty($activeLanguages) && isset($activeLanguages[$possibleLang])) {
-                    $language = $possibleLang;
-                }
-            }
-
-            // Check for query param lang in referer URL
-            if (!$language && preg_match('/[?&]lang=([a-z]{2})/i', $referer, $matches)) {
-                $possibleLang = $matches[1];
-
-                // Verify this is a valid WPML language
-                $activeLanguages = apply_filters('wpml_active_languages', []);
-                if (!empty($activeLanguages) && isset($activeLanguages[$possibleLang])) {
-                    $language = $possibleLang;
-                }
-            }
+            $language = $this->extractValidLanguageFromUrl($referer);
         }
 
         // If we found a language, set it
         if ($language) {
             do_action('wpml_switch_language', $language);
         }
+    }
+
+    private function extractValidLanguageFromUrl($url)
+    {
+        if (!is_string($url) || $url === '') {
+            return null;
+        }
+
+        $activeLanguages = apply_filters('wpml_active_languages', []);
+        if (empty($activeLanguages) || !is_array($activeLanguages)) {
+            return null;
+        }
+
+        $parsed = wp_parse_url($url);
+        $path = isset($parsed['path']) ? trim((string) $parsed['path'], '/') : '';
+        if ($path !== '') {
+            $segments = explode('/', $path);
+            $possibleLang = sanitize_text_field((string) $segments[0]);
+            if (isset($activeLanguages[$possibleLang])) {
+                return $possibleLang;
+            }
+        }
+
+        $query = isset($parsed['query']) ? (string) $parsed['query'] : '';
+        if ($query !== '') {
+            parse_str($query, $queryArgs);
+            if (!empty($queryArgs['lang'])) {
+                $possibleLang = sanitize_text_field((string) $queryArgs['lang']);
+                if (isset($activeLanguages[$possibleLang])) {
+                    return $possibleLang;
+                }
+            }
+        }
+
+        return null;
     }
 
     public function translateLabelShortcode($inputLabel, $key, $form)
