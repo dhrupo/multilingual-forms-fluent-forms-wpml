@@ -42,6 +42,16 @@ You must have all three plugins active for this integration to function properly
 
 ## Changelog
 
+### 1.0.4
+- Fix translated payment option normalization and validation across multilingual payment forms
+- Fix translated notification and submission output rendering for email notifications and HTML-rendered submission content
+- Fix translated checkbox, payment, and tabular-grid values in {all_data} output
+- Fix translated admin approval and double opt-in email/runtime language handling
+- Improve WPML compatibility for quiz, payment, landing-page, and confirmation translation flows
+
+### 1.0.3
+- Bump plugin version metadata for the next release
+
 ### 1.0.2
 - Add multiple email notifications support
 - Add PHP 7.4 to 8.3 compatibility

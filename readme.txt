@@ -5,7 +5,7 @@ Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.4
 Tested up to PHP: 8.3
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,13 @@ Install From WordPress Admin Panel:
 
 
 == Changelog ==
+
+= 1.0.4 =
+- Fix translated payment option normalization and validation across multilingual payment forms
+- Fix translated notification and submission output rendering for email notifications and HTML-rendered submission content
+- Fix translated checkbox, payment, and tabular-grid values in {all_data} output
+- Fix translated admin approval and double opt-in email/runtime language handling
+- Improve WPML compatibility for quiz, payment, landing-page, and confirmation translation flows
 
 = 1.0.3 =
 - Bump plugin version metadata for the next release
