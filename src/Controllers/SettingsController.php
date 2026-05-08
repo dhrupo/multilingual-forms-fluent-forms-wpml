@@ -283,7 +283,7 @@ class SettingsController
 
         $form->settings = $formSettings;
         
-        $formFields = FormFieldsParser::getFields($form, true);
+        $formFields = $this->getFormFields($form, true);
         $package = $this->getFormPackage($form);
 
         // Decode form_fields JSON to access submitButton and stepsWrapper.
@@ -475,7 +475,7 @@ class SettingsController
             return $form;
         }
 
-        $formFields = FormFieldsParser::getFields($form, true);
+        $formFields = $this->getFormFields($form, true);
 
         $extractedFields = [];
         foreach ($formFields as $field) {
@@ -893,7 +893,7 @@ class SettingsController
         if (!$options && isset($form->id)) {
             $formModel = $this->getCachedFormModel($form->id);
             if ($formModel) {
-                $formFields = FormFieldsParser::getFields($formModel, true);
+                $formFields = $this->getFormFields($formModel, true);
                 foreach ((array) $formFields as $formField) {
                     if (ArrayHelper::get($formField, 'element') !== 'multi_payment_component') {
                         continue;
@@ -945,7 +945,7 @@ class SettingsController
 
         $options = ArrayHelper::get($field, 'options', []);
         if (!$options) {
-            $options = Helper::advancedOptionsValueLabelMap(
+            $options = $this->getAdvancedOptionsValueLabelMap(
                 (array) ArrayHelper::get($field, 'raw.settings.advanced_options', [])
             );
         }
@@ -973,6 +973,121 @@ class SettingsController
         }
 
         return $translatedMap;
+    }
+
+    private function getAdvancedOptionsValueLabelMap(array $options)
+    {
+        if (method_exists(Helper::class, 'advancedOptionsValueLabelMap')) {
+            return (array) Helper::advancedOptionsValueLabelMap($options);
+        }
+
+        $formatted = [];
+
+        foreach ($this->flattenAdvancedOptions($options) as $option) {
+            $formatted[ArrayHelper::get($option, 'value')] = ArrayHelper::get($option, 'label');
+        }
+
+        return $formatted;
+    }
+
+    private function getFormFields($form, $asArray = false)
+    {
+        if (method_exists(FormFieldsParser::class, 'getFields')) {
+            return FormFieldsParser::getFields($form, $asArray);
+        }
+
+        if (class_exists('\FluentForm\App\Services\Parser\Form')) {
+            $parser = new \FluentForm\App\Services\Parser\Form($form);
+
+            if (method_exists($parser, 'getFields')) {
+                return $parser->getFields($asArray);
+            }
+        }
+
+        return [];
+    }
+
+    private function getFormInputs($form, array $with = [])
+    {
+        if (method_exists(FormFieldsParser::class, 'getInputs')) {
+            return FormFieldsParser::getInputs($form, $with);
+        }
+
+        if (class_exists('\FluentForm\App\Services\Parser\Form')) {
+            $parser = new \FluentForm\App\Services\Parser\Form($form);
+
+            if (method_exists($parser, 'getInputs')) {
+                return $parser->getInputs($with);
+            }
+        }
+
+        return [];
+    }
+
+    private function getSubmissionMetaValue($submissionId, $metaKey, $default = false)
+    {
+        if (method_exists(Helper::class, 'getSubmissionMeta')) {
+            return Helper::getSubmissionMeta($submissionId, $metaKey, $default);
+        }
+
+        if (!$submissionId || !$metaKey || !function_exists('wpFluent')) {
+            return $default;
+        }
+
+        $value = wpFluent()
+            ->table('fluentform_submission_meta')
+            ->where('response_id', $submissionId)
+            ->where('meta_key', $metaKey)
+            ->value('value');
+
+        return $value !== null ? $value : $default;
+    }
+
+    private function formatFieldValue($value)
+    {
+        if (method_exists(FormDataParser::class, 'formatValue')) {
+            return FormDataParser::formatValue($value);
+        }
+
+        if (is_array($value) || is_object($value)) {
+            $values = array_filter(array_values((array) $value), function ($item) {
+                return $item !== '' && $item !== null;
+            });
+
+            if (function_exists('fluentImplodeRecursive')) {
+                return fluentImplodeRecursive(', ', $values);
+            }
+
+            return implode(', ', array_map('strval', $values));
+        }
+
+        return $value;
+    }
+
+    private function flattenAdvancedOptions(array $options)
+    {
+        $flattened = [];
+
+        foreach ($options as $option) {
+            if (!is_array($option)) {
+                continue;
+            }
+
+            if (
+                ArrayHelper::get($option, 'type') === 'group' &&
+                is_array(ArrayHelper::get($option, 'options'))
+            ) {
+                $flattened = array_merge(
+                    $flattened,
+                    $this->flattenAdvancedOptions((array) ArrayHelper::get($option, 'options', []))
+                );
+                continue;
+            }
+
+            $flattened[] = $option;
+        }
+
+        return $flattened;
     }
 
     private function getTranslatedPaymentOptionLabelMap($field, $form)
@@ -1158,7 +1273,7 @@ class SettingsController
         if (!$options && isset($form->id)) {
             $formModel = $this->getCachedFormModel($form->id);
             if ($formModel) {
-                $formFields = FormFieldsParser::getFields($formModel, true);
+                $formFields = $this->getFormFields($formModel, true);
                 foreach ((array) $formFields as $formField) {
                     if (ArrayHelper::get($formField, 'element') !== 'multi_payment_component') {
                         continue;
@@ -1730,7 +1845,7 @@ class SettingsController
             return $atts;
         }
 
-        $hash = (string) Helper::getSubmissionMeta($insertId, '_entry_uid_hash');
+        $hash = (string) $this->getSubmissionMetaValue($insertId, '_entry_uid_hash');
         if (!$hash) {
             return $atts;
         }
@@ -2360,7 +2475,7 @@ class SettingsController
     {
         self::$isPaymentFormSubmitNotification = true;
 
-        if ('yes' === Helper::getSubmissionMeta($submissionId, '_ff_on_submit_email_sent')) {
+        if ('yes' === $this->getSubmissionMetaValue($submissionId, '_ff_on_submit_email_sent')) {
             return;
         }
 
@@ -4874,12 +4989,12 @@ class SettingsController
     private function renderAllDataFieldValue($value, $field, $formId)
     {
         if (!$field || !is_array($field)) {
-            return FormDataParser::formatValue($value);
+            return $this->formatFieldValue($value);
         }
 
         $element = ArrayHelper::get($field, 'element');
         if (!$element) {
-            return FormDataParser::formatValue($value);
+            return $this->formatFieldValue($value);
         }
 
         $renderedValue = apply_filters(
@@ -4891,7 +5006,7 @@ class SettingsController
         );
 
         if (is_array($renderedValue) || is_object($renderedValue)) {
-            return FormDataParser::formatValue($renderedValue);
+            return $this->formatFieldValue($renderedValue);
         }
 
         return (string) $renderedValue;
@@ -4913,7 +5028,7 @@ class SettingsController
             return $output;
         }
 
-        $fields = FormFieldsParser::getInputs($form, ['element', 'options', 'label', 'raw']);
+        $fields = $this->getFormInputs($form, ['element', 'options', 'label', 'raw']);
         $translationMap = [];
 
         foreach ($fields as $fieldName => $field) {
@@ -4940,7 +5055,7 @@ class SettingsController
             return $html;
         }
 
-        $inputs = FormFieldsParser::getInputs($form, ['element', 'label', 'options', 'raw']);
+        $inputs = $this->getFormInputs($form, ['element', 'label', 'options', 'raw']);
         $translationMap = [];
 
         foreach ($results as $fieldName => $result) {
