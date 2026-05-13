@@ -36,6 +36,10 @@ class SettingsController
 
     private static $notificationFeedMessageCache = [];
 
+    private static $formPackageCache = [];
+
+    private static $translatedFormFieldsCache = [];
+
     private static $adminApprovalDeclinedEmailContext = null;
 
     private static $currentDoubleOptinContext = null;
@@ -319,6 +323,8 @@ class SettingsController
 
     public function handleFormFieldUpdate($formFields, $formId)
     {
+        unset(self::$translatedFormFieldsCache[$formId]);
+
         if (!$this->isWpmlEnabledOnForm($formId)) {
             return $formFields;
         }
@@ -475,6 +481,13 @@ class SettingsController
             return $form;
         }
 
+        $lang = (string) apply_filters('wpml_current_language', null);
+
+        if (isset(self::$translatedFormFieldsCache[$form->id][$lang])) {
+            $form->fields = self::$translatedFormFieldsCache[$form->id][$lang];
+            return $form;
+        }
+
         $formFields = $this->getFormFields($form, true);
 
         $extractedFields = [];
@@ -484,7 +497,7 @@ class SettingsController
 
         // Extract strings from submit button
         if (isset($form->fields['submitButton'])) {
-            $submitButton = json_decode(json_encode($form->fields['submitButton']), true);
+            $submitButton = $this->asArrayDeep($form->fields['submitButton']);
             $submitId = isset($submitButton['uniqElKey']) ? $submitButton['uniqElKey'] : 'submit_button';
             
             if (isset($submitButton['settings']['btn_text']) && !empty($submitButton['settings']['btn_text'])) {
@@ -500,12 +513,12 @@ class SettingsController
 
         // Extract strings from step wrapper elements
         if (isset($form->fields['stepsWrapper']['stepStart'])) {
-            $stepStart = json_decode(json_encode($form->fields['stepsWrapper']['stepStart']), true);
+            $stepStart = $this->asArrayDeep($form->fields['stepsWrapper']['stepStart']);
             $this->extractFieldStrings($extractedFields, $stepStart, $form->id);
         }
 
         if (isset($form->fields['stepsWrapper']['stepEnd'])) {
-            $stepEnd = json_decode(json_encode($form->fields['stepsWrapper']['stepEnd']), true);
+            $stepEnd = $this->asArrayDeep($form->fields['stepsWrapper']['stepEnd']);
             $this->extractFieldStrings($extractedFields, $stepEnd, $form->id);
         }
 
@@ -549,7 +562,9 @@ class SettingsController
             $this->updateFieldTranslations($stepEnd, 'step_end', $extractedFields);
             $form->fields['stepsWrapper']['stepEnd'] = $stepEnd;
         }
-        
+
+        self::$translatedFormFieldsCache[$form->id][$lang] = $form->fields;
+
         return $form;
     }
 
@@ -2637,11 +2652,17 @@ class SettingsController
 
     private function getFormPackage($form)
     {
-        return [
-            'kind'  => 'Fluent Forms',
-            'name'  => $form->id,
-            'title' => $form->title,
-        ];
+        $id = isset($form->id) ? (int) $form->id : 0;
+
+        if (!isset(self::$formPackageCache[$id])) {
+            self::$formPackageCache[$id] = [
+                'kind'  => 'Fluent Forms',
+                'name'  => $form->id,
+                'title' => $form->title,
+            ];
+        }
+
+        return self::$formPackageCache[$id];
     }
 
     private function extractAndRegisterStrings($fields, $formId, $package)
@@ -4756,7 +4777,9 @@ class SettingsController
         if (!$formId || !is_numeric($formId) || $formId <= 0) {
             return;
         }
-        
+
+        unset(self::$translatedFormFieldsCache[$formId]);
+
         if (!$this->isWpmlActive()) {
             return;
         }
@@ -5102,7 +5125,11 @@ class SettingsController
     
     protected function isWpmlActive()
     {
-        return defined('ICL_SITEPRESS_VERSION') && defined('WPML_ST_VERSION');
+        static $isActive = null;
+        if ($isActive === null) {
+            $isActive = defined('ICL_SITEPRESS_VERSION') && defined('WPML_ST_VERSION');
+        }
+        return $isActive;
     }
 
     public function getCurrentWpmlLanguage()
@@ -5126,6 +5153,11 @@ class SettingsController
         }
 
         return static::$formModelCache[$formId];
+    }
+
+    private function asArrayDeep($value)
+    {
+        return is_array($value) ? $value : json_decode(json_encode($value), true);
     }
 
     public function addLanguageToUrl($url)
