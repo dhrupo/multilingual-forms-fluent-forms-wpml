@@ -42,6 +42,12 @@ You must have all three plugins active for this integration to function properly
 
 ## Changelog
 
+= 1.0.6 =
+- Fix compatibility for translated option response
+
+= 1.0.5 =
+- Maintenance Update
+
 ### 1.0.4
 - Fix translated payment option normalization and validation across multilingual payment forms
 - Fix translated notification and submission output rendering for email notifications and HTML-rendered submission content

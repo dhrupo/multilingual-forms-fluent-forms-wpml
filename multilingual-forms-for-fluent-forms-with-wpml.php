@@ -5,10 +5,10 @@
  * Author: dhrupo, pyrobd
  * Plugin URI: https://github.com/dhrupo/fluent-forms-wpml
  * Author URI: https://github.com/dhrupo/
- * Version: 1.0.5
+ * Version: 1.0.6
  * License: GPLv2 or later
  * Text Domain: multilingual-forms-fluent-forms-wpml
- * Requires at least: 5.0
+ * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to PHP: 8.3
  * Requires Plugins: fluentform
@@ -35,7 +35,7 @@
 defined('ABSPATH') || exit;
 define('MFFFWPML_DIR', plugin_dir_path(__FILE__));
 define('MFFFWPML_URL', plugins_url('', __FILE__));
-defined('MFFFWPML_VERSION') or define('MFFFWPML_VERSION', '1.0.5');
+defined('MFFFWPML_VERSION') or define('MFFFWPML_VERSION', '1.0.6');
 
 class MultilingualFormsFluentFormsWpml
 {
