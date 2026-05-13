@@ -44,6 +44,7 @@ You must have all three plugins active for this integration to function properly
 
 = 1.0.6 =
 - Fix compatibility for translated option response
+- Improves cache handling for translated form fields and options to enhance performance when rendering the same form multiple times in a request
 
 = 1.0.5 =
 - Maintenance Update
