@@ -6,6 +6,7 @@ use FluentForm\App\Helpers\Helper;
 use FluentForm\App\Models\Form;
 use FluentForm\App\Models\FormMeta;
 use FluentForm\App\Models\Submission;
+use FluentForm\App\Modules\Acl\Acl;
 use FluentForm\App\Modules\Form\FormDataParser;
 use FluentForm\App\Modules\Form\FormFieldsParser;
 use FluentForm\App\Services\FormBuilder\Notifications\EmailNotification;
@@ -239,17 +240,34 @@ class SettingsController
 
     public function getWpmlSettings()
     {
-        $request = $this->app->request->get();
-        $formId = ArrayHelper::get($request, 'form_id');
+        $formId = $this->authorizeFormRequest();
+
         $isFFWpmlEnabled = $this->isWpmlEnabledOnForm($formId);
         wp_send_json_success($isFFWpmlEnabled);
     }
 
+    /**
+     * `addAdminAjaxAction` registers `wp_ajax_*` only, so every logged-in user —
+     * down to Subscriber — can reach these actions without this guard.
+     * Never returns on failure; Acl sends a 422.
+     */
+    protected function authorizeFormRequest()
+    {
+        $formId = Acl::verifyFormId(
+            ArrayHelper::get($this->app->request->get(), 'form_id')
+        );
+
+        Acl::verify('fluentform_forms_manager', $formId);
+
+        return $formId;
+    }
+
     public function storeWpmlSettings()
     {
+        $formId = $this->authorizeFormRequest();
+
         $request = $this->app->request->get();
         $isFFWpmlEnabled = ArrayHelper::get($request, 'is_ff_wpml_enabled', false) == 'true';
-        $formId = ArrayHelper::get($request, 'form_id');
 
         if (!$isFFWpmlEnabled) {
             Helper::setFormMeta($formId, 'ff_wpml', false);
@@ -257,6 +275,13 @@ class SettingsController
         }
 
         $form = Form::find($formId);
+
+        if (!$form) {
+            wp_send_json_error([
+                'message' => __('Form not found.', 'multilingual-forms-fluent-forms-wpml'),
+            ], 404);
+        }
+
         $formSettings = FormMeta
             ::where('form_id', $formId)
             ->whereNot('meta_key', [
@@ -401,14 +426,8 @@ class SettingsController
 
     public function removeWpmlSettings()
     {
-        $request = $this->app->request->get();
-        $formId = ArrayHelper::get($request, 'form_id');
-        
-        if (!$formId || !is_numeric($formId)) {
-            wp_send_json_error(__('Invalid form ID.', 'multilingual-forms-fluent-forms-wpml'));
-            return;
-        }
-        
+        $formId = $this->authorizeFormRequest();
+
         $this->removeWpmlStrings($formId);
         wp_send_json_success(__('Translations removed successfully.', 'multilingual-forms-fluent-forms-wpml'));
     }
@@ -4359,8 +4378,9 @@ class SettingsController
             $field['settings']['label'] = $translations["{$fieldName}->Label"];
         }
 
-        if (!empty($field->settings->admin_label)) {
-            $field['settings']['admin_label'] = $translations["{$fieldName}->admin_field_label"];
+        // Registered under "<field>->admin_label" but stored as settings.admin_field_label.
+        if (isset($translations["{$fieldName}->admin_label"])) {
+            $field['settings']['admin_field_label'] = $translations["{$fieldName}->admin_label"];
         }
 
         if (isset($translations["{$fieldName}->placeholder"])) {
@@ -4772,23 +4792,34 @@ class SettingsController
         return $this->isWpmlActive() && Helper::getFormMeta($formId, 'ff_wpml', false) == true;
     }
     
-    private function removeWpmlStrings($formId)
+    /**
+     * Registered as the `fluentform/after_form_delete` callback, so this must stay
+     * public — WordPress cannot invoke private methods as hook callbacks.
+     */
+    public function removeWpmlStrings($formId)
     {
         if (!$formId || !is_numeric($formId) || $formId <= 0) {
             return;
         }
 
-        unset(self::$translatedFormFieldsCache[$formId]);
+        $cacheKey = absint($formId);
+        unset(
+            self::$translatedFormFieldsCache[$cacheKey],
+            self::$formPackageCache[$cacheKey],
+            self::$formModelCache[$cacheKey]
+        );
 
         if (!$this->isWpmlActive()) {
             return;
         }
-        
+
         if (function_exists('do_action')) {
             do_action('wpml_delete_package', $formId, 'Fluent Forms');
         }
-        
-        if (class_exists('FluentForm\App\Helpers\Helper')) {
+
+        // On the delete path the meta rows are already gone, so writing the flag back
+        // would orphan a row that a future form reusing the id would inherit.
+        if (class_exists('FluentForm\App\Helpers\Helper') && Form::find($formId)) {
             Helper::setFormMeta($formId, 'ff_wpml', false);
         }
     }
@@ -4991,11 +5022,7 @@ class SettingsController
             }
 
             $translatedLabel = $this->translateInputLabel($inputKey, $label, $form);
-            $renderedValue = $this->renderAllDataFieldValue(
-                $rawValue,
-                ArrayHelper::get($formFields, $inputKey, []),
-                $formId
-            );
+            $renderedValue = $this->renderAllDataFieldValue($rawValue);
 
             if ($renderedValue === '') {
                 continue;
@@ -5009,30 +5036,19 @@ class SettingsController
         return $newHtml;
     }
 
-    private function renderAllDataFieldValue($value, $field, $formId)
+    /**
+     * Do not re-apply `fluentform/response_render_{element}` here — FormDataParser
+     * has already run it over every value. A second pass double-renders callbacks
+     * that are not idempotent: terms_and_condition maps 'on' => 'Accepted', then
+     * 'Accepted' => 'Declined', inverting the recorded consent.
+     */
+    private function renderAllDataFieldValue($value)
     {
-        if (!$field || !is_array($field)) {
-            return $this->formatFieldValue($value);
+        if (is_array($value) || is_object($value)) {
+            return (string) $this->formatFieldValue($value);
         }
 
-        $element = ArrayHelper::get($field, 'element');
-        if (!$element) {
-            return $this->formatFieldValue($value);
-        }
-
-        $renderedValue = apply_filters(
-            'fluentform/response_render_' . $element,
-            $value,
-            $field,
-            $formId,
-            true
-        );
-
-        if (is_array($renderedValue) || is_object($renderedValue)) {
-            return $this->formatFieldValue($renderedValue);
-        }
-
-        return (string) $renderedValue;
+        return (string) $value;
     }
 
     public function translateSurveyShortcodeOutput($output, $tag, $attr, $m)
@@ -5123,7 +5139,11 @@ class SettingsController
         return $label;
     }
     
-    protected function isWpmlActive()
+    /**
+     * Also registered as the `fluentform_pdf/check_wpml_active` filter callback,
+     * so this must stay public.
+     */
+    public function isWpmlActive()
     {
         static $isActive = null;
         if ($isActive === null) {

@@ -11,7 +11,6 @@
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to PHP: 8.3
- * Requires Plugins: fluentform
  */
 
 /**
@@ -110,7 +109,7 @@ class MultilingualFormsFluentFormsWpml
     /**
      * Notify the user about the FluentForm dependency and instructs to install it.
      */
-    protected function injectDependency()
+    public function injectDependency()
     {
         add_action('admin_notices', function() {
             $pluginInfo = $this->getFluentFormInstallationDetails();
@@ -142,31 +141,65 @@ class MultilingualFormsFluentFormsWpml
             'url'    => ''
         ];
 
-        $allPlugins = get_plugins();
+        $pluginFile = $this->locateFluentForm();
 
-        if (isset($allPlugins['fluentform/fluentform.php'])) {
-            $url = wp_nonce_url(
-                self_admin_url('plugins.php?action=activate&plugin=fluentform/fluentform.php'),
-                'activate-plugin_fluentform/fluentform.php'
-            );
-
+        if ($pluginFile) {
             $activation->action = 'activate';
-        } else {
-            $api = (object)[
-                'slug' => 'fluentform'
-            ];
 
-            $url = wp_nonce_url(
-                self_admin_url('update.php?action=install-plugin&plugin=' . $api->slug),
-                'install-plugin_' . $api->slug
+            $activation->url = wp_nonce_url(
+                self_admin_url('plugins.php?action=activate&plugin=' . urlencode($pluginFile)),
+                'activate-plugin_' . $pluginFile
             );
+
+            return $activation;
         }
 
-        $activation->url = $url;
+        $activation->url = wp_nonce_url(
+            self_admin_url('update.php?action=install-plugin&plugin=fluentform'),
+            'install-plugin_fluentform'
+        );
 
         return $activation;
     }
+
+    /**
+     * Fluent Forms may live in a directory other than `fluentform` (renamed
+     * installs, dev checkouts), so fall back to matching on text domain.
+     */
+    protected function locateFluentForm()
+    {
+        if (!function_exists('get_plugins')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+
+        $allPlugins = get_plugins();
+
+        if (isset($allPlugins['fluentform/fluentform.php'])) {
+            return 'fluentform/fluentform.php';
+        }
+
+        foreach ($allPlugins as $file => $data) {
+            $isFluentForm = 'fluentform.php' === basename($file) &&
+                isset($data['TextDomain']) &&
+                'fluentform' === $data['TextDomain'];
+
+            if ($isFluentForm) {
+                return $file;
+            }
+        }
+
+        return '';
+    }
 }
+
+// Checked at runtime rather than via the `Requires Plugins` header: that header
+// resolves by directory slug, so Fluent Forms installed in any directory other
+// than `fluentform` would block activation despite being active.
+add_action('admin_init', function() {
+    if (!defined('FLUENTFORM')) {
+        (new MultilingualFormsFluentFormsWpml())->injectDependency();
+    }
+});
 
 add_action('fluentform/loaded', function() {
     if (!function_exists('icl_t')) {
