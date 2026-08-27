@@ -2,10 +2,10 @@
 Contributors: dhrupo, pyrobd
 Tags: WPML, Form,Fluentform, Translate, Fluent Forms
 Requires at least: 5.0
-Tested up to: 6.9
+Tested up to: 7.1
 Requires PHP: 7.4
 Tested up to PHP: 8.3
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,11 @@ Install From WordPress Admin Panel:
 
 
 == Changelog ==
+
+= 1.0.7 =
+- Fix untranslatable "Other" option label, placeholder, and required message on checkbox and radio fields
+- Fix untranslatable country list group headings and payment summary empty cart text
+- Fix submissions in a secondary language storing the source language "Other" prefix
 
 = 1.0.6 =
 - Fix compatibility for translated option response

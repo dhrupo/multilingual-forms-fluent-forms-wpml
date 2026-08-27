@@ -42,6 +42,11 @@ You must have all three plugins active for this integration to function properly
 
 ## Changelog
 
+= 1.0.7 =
+- Fix untranslatable "Other" option label, placeholder, and required message on checkbox and radio fields
+- Fix untranslatable country list group headings and payment summary empty cart text
+- Fix submissions in a secondary language storing the source language "Other" prefix
+
 = 1.0.6 =
 - Fix compatibility for translated option response
 - Improves cache handling for translated form fields and options to enhance performance when rendering the same form multiple times in a request

@@ -41,6 +41,8 @@ class SettingsController
 
     private static $translatedFormFieldsCache = [];
 
+    private static $fieldStringTranslationCache = [];
+
     private static $adminApprovalDeclinedEmailContext = null;
 
     private static $currentDoubleOptinContext = null;
@@ -69,6 +71,17 @@ class SettingsController
         
         add_filter('fluentform/ajax_url', [$this, 'setAjaxLanguage'], 10, 1);
         add_filter('fluentform/rendering_form', [$this, 'setWpmlForm'], 10, 1);
+
+        // For the submit path: SubmissionHandlerService uses Form::find() and
+        // never runs `fluentform/rendering_form`.
+        foreach (['input_checkbox', 'input_radio'] as $checkableElement) {
+            add_filter(
+                'fluentform/rendering_field_data_' . $checkableElement,
+                [$this, 'translateRenderingFieldData'],
+                10,
+                2
+            );
+        }
         add_filter('fluentform/recaptcha_lang', [$this, 'setCaptchaLanguage'], 10, 1);
         add_filter('fluentform/hcaptcha_lang', [$this, 'setCaptchaLanguage'], 10, 1);
         add_filter('fluentform/turnstile_lang', [$this, 'setCaptchaLanguage'], 10, 1);
@@ -348,7 +361,7 @@ class SettingsController
 
     public function handleFormFieldUpdate($formFields, $formId)
     {
-        unset(self::$translatedFormFieldsCache[$formId]);
+        unset(self::$translatedFormFieldsCache[$formId], self::$fieldStringTranslationCache[$formId]);
 
         if (!$this->isWpmlEnabledOnForm($formId)) {
             return $formFields;
@@ -494,6 +507,159 @@ class SettingsController
         return $url;
     }
 
+    /**
+     * Hook callback, so this must stay public.
+     *
+     * @param array       $rawField
+     * @param object|null $form
+     * @return array
+     */
+    public function translateRenderingFieldData($rawField, $form = null)
+    {
+        if (!is_array($rawField) || !is_object($form) || !isset($form->id)) {
+            return $rawField;
+        }
+
+        if (!$this->isWpmlEnabledOnForm($form->id)) {
+            return $rawField;
+        }
+
+        $translations = $this->getFormStringTranslations($form);
+
+        if (!$translations) {
+            return $rawField;
+        }
+
+        return $this->translateRawFieldWithMap($rawField, $translations);
+    }
+
+    /**
+     * Resolved string map for a form, in the current language. Omits
+     * setWpmlForm()'s submit-button and step keys.
+     *
+     * @param object $form
+     * @return array
+     */
+    private function getFormStringTranslations($form)
+    {
+        $lang = (string) apply_filters('wpml_current_language', null);
+        $cacheKey = (int) $form->id;
+
+        if (isset(self::$fieldStringTranslationCache[$cacheKey][$lang])) {
+            return self::$fieldStringTranslationCache[$cacheKey][$lang];
+        }
+
+        // Re-read: a conversational submit flattens $form->form_fields in place.
+        $sourceForm = $this->getCachedFormModel($form->id);
+
+        if (!$sourceForm) {
+            return [];
+        }
+
+        $formFields = $this->getFormFields($sourceForm, true);
+
+        if (!is_array($formFields) || !$formFields) {
+            // Not cached — caching a parser failure would silence the request.
+            return [];
+        }
+
+        $extracted = [];
+        foreach ($formFields as $field) {
+            $this->extractFieldStrings($extracted, $field, $form->id);
+        }
+
+        $package = $this->getFormPackage($form);
+
+        $translations = [];
+        foreach ($extracted as $key => $value) {
+            $translations[$key] = apply_filters('wpml_translate_string', $value, $key, $package);
+        }
+
+        self::$fieldStringTranslationCache[$cacheKey][$lang] = $translations;
+
+        return $translations;
+    }
+
+    /**
+     * Sanitizes a translated value; translations bypass FluentForm's
+     * `unfiltered_html` gate, and esc_attr() at the sink is undone by JS that
+     * reads the attribute back and re-injects it.
+     *
+     * @param mixed $value
+     * @param bool  $allowHtml
+     * @return mixed
+     */
+    private function sanitizeTranslatedSetting($value, $allowHtml = false)
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        return $allowHtml ? wp_kses_post($value) : sanitize_text_field($value);
+    }
+
+    /**
+     * Applies a resolved string map to one raw field. Exact matches win; a bare
+     * "_<name>" suffix would match siblings ("email" / "contact_email").
+     *
+     * @param array $rawField
+     * @param array $translations
+     * @return array
+     */
+    private function translateRawFieldWithMap($rawField, $translations)
+    {
+        $fieldName = ArrayHelper::get($rawField, 'attributes.name');
+
+        if (!$fieldName) {
+            $fieldName = ArrayHelper::get($rawField, 'uniqElKey');
+        }
+
+        if (!$fieldName) {
+            return $rawField;
+        }
+
+        $nestedSuffixes = ['_container_' . $fieldName, '_repeater_' . $fieldName];
+
+        $scoped = [];
+        $nested = [];
+
+        foreach ($translations as $key => $value) {
+            $separatorPosition = strpos($key, '->');
+
+            if (false === $separatorPosition) {
+                continue;
+            }
+
+            $keyFieldName = substr($key, 0, $separatorPosition);
+
+            if ($keyFieldName === $fieldName) {
+                $scoped[$key] = $value;
+                continue;
+            }
+
+            foreach ($nestedSuffixes as $nestedSuffix) {
+                if (substr($keyFieldName, -strlen($nestedSuffix)) === $nestedSuffix) {
+                    $nested[$fieldName . substr($key, $separatorPosition)] = $value;
+                    break;
+                }
+            }
+        }
+
+        foreach ($nested as $nestedKey => $nestedValue) {
+            if (!isset($scoped[$nestedKey])) {
+                $scoped[$nestedKey] = $nestedValue;
+            }
+        }
+
+        if (!$scoped) {
+            return $rawField;
+        }
+
+        $this->updateFieldTranslations($rawField, $fieldName, $scoped);
+
+        return $rawField;
+    }
+
     public function setWpmlForm($form)
     {
         if (!is_object($form) || !isset($form->id) || !$this->isWpmlEnabledOnForm($form->id)) {
@@ -547,6 +713,9 @@ class SettingsController
             $package = $this->getFormPackage($form);
             $extractedFields[$key] = apply_filters('wpml_translate_string', $value, $key, $package);
         }
+
+        // Seed the field map so the per-field filter does not redo this pass.
+        self::$fieldStringTranslationCache[$form->id][$lang] = $extractedFields;
 
         $updatedFields = $this->updateFormFieldsWithTranslations($form->fields['fields'], $extractedFields);
 
@@ -2677,7 +2846,8 @@ class SettingsController
             self::$formPackageCache[$id] = [
                 'kind'  => 'Fluent Forms',
                 'name'  => $form->id,
-                'title' => $form->title,
+                // WPFluent's isset() is !is_null(); a NULL title would cache broken.
+                'title' => isset($form->title) ? $form->title : '',
             ];
         }
 
@@ -2767,6 +2937,31 @@ class SettingsController
 
         if (!empty($field->settings->suffix_label)) {
             $fields["{$fieldIdentifier}->suffix_label"] = $field->settings->suffix_label;
+        }
+
+        $otherOptionEnabled = isset($field->settings->enable_other_option)
+            && 'yes' === $field->settings->enable_other_option;
+
+        $otherOptionLabel = isset($field->settings->other_option_label)
+            ? trim((string) $field->settings->other_option_label)
+            : '';
+
+        // Gated: Pro backfills defaults on every checkable field, but
+        // Checkable.php renders them only when the toggle is 'yes'.
+        if ($otherOptionEnabled) {
+            // A blank label still reaches storage as 'Other'. The literal is
+            // deliberate: __() would resolve in the saving admin's locale.
+            $fields["{$fieldIdentifier}->other_option_label"] = '' !== $otherOptionLabel
+                ? $field->settings->other_option_label
+                : 'Other';
+
+            if (!empty($field->settings->other_option_placeholder)) {
+                $fields["{$fieldIdentifier}->other_option_placeholder"] = $field->settings->other_option_placeholder;
+            }
+
+            if (!empty($field->settings->other_option_required_message)) {
+                $fields["{$fieldIdentifier}->other_option_required_message"] = $field->settings->other_option_required_message;
+            }
         }
 
         // Handle validation messages
@@ -3028,6 +3223,12 @@ class SettingsController
                 }
                 break;
 
+            case 'payment_summary_component':
+                if (!empty($field->settings->cart_empty_text)) {
+                    $fields["{$fieldIdentifier}->cart_empty_text"] = $field->settings->cart_empty_text;
+                }
+                break;
+
             case 'button':
             case 'custom_submit_button':
                 // Extract button text
@@ -3102,6 +3303,15 @@ class SettingsController
                 break;
 
             case 'select_country':
+                // Optgroup headings; priority_based lists only (SelectCountry.php:62).
+                if (!empty($field->settings->primary_label)) {
+                    $fields["{$fieldIdentifier}->primary_label"] = $field->settings->primary_label;
+                }
+
+                if (!empty($field->settings->other_label)) {
+                    $fields["{$fieldIdentifier}->other_label"] = $field->settings->other_label;
+                }
+
                 // Extract country options labels
                 if (!empty($field->options)) {
                     foreach ($field->options as $value => $label) {
@@ -4408,6 +4618,25 @@ class SettingsController
             $field['settings']['suffix_label'] = $translations["{$fieldName}->suffix_label"];
         }
 
+        if (isset($translations["{$fieldName}->other_option_label"])) {
+            $field['settings']['other_option_label'] = $this->sanitizeTranslatedSetting(
+                $translations["{$fieldName}->other_option_label"]
+            );
+        }
+
+        if (isset($translations["{$fieldName}->other_option_placeholder"])) {
+            $field['settings']['other_option_placeholder'] = $this->sanitizeTranslatedSetting(
+                $translations["{$fieldName}->other_option_placeholder"]
+            );
+        }
+
+        if (isset($translations["{$fieldName}->other_option_required_message"])) {
+            $field['settings']['other_option_required_message'] = $this->sanitizeTranslatedSetting(
+                $translations["{$fieldName}->other_option_required_message"],
+                true
+            );
+        }
+
         // Update validation messages
         if (isset($field['settings']['validation_rules'])) {
             foreach ($field['settings']['validation_rules'] as $rule => &$details) {
@@ -4589,6 +4818,16 @@ class SettingsController
                 }
                 break;
 
+            case 'payment_summary_component':
+                $cartEmptyTextKey = "{$fieldName}->cart_empty_text";
+                if (isset($translations[$cartEmptyTextKey])) {
+                    $field['settings']['cart_empty_text'] = $this->sanitizeTranslatedSetting(
+                        $translations[$cartEmptyTextKey],
+                        true
+                    );
+                }
+                break;
+
             case 'payment_method':
                 // Update payment methods and their settings
                 if (isset($field['settings']['payment_methods']) && is_array($field['settings']['payment_methods'])) {
@@ -4732,6 +4971,21 @@ class SettingsController
                         }
                     }
                 }
+
+                // Keep here — a second `case` would make the above unreachable.
+                $primaryLabelKey = "{$fieldName}->primary_label";
+                if (isset($translations[$primaryLabelKey])) {
+                    $field['settings']['primary_label'] = $this->sanitizeTranslatedSetting(
+                        $translations[$primaryLabelKey]
+                    );
+                }
+
+                $otherLabelKey = "{$fieldName}->other_label";
+                if (isset($translations[$otherLabelKey])) {
+                    $field['settings']['other_label'] = $this->sanitizeTranslatedSetting(
+                        $translations[$otherLabelKey]
+                    );
+                }
                 break;
 
             case 'chained_select':
@@ -4805,6 +5059,7 @@ class SettingsController
         $cacheKey = absint($formId);
         unset(
             self::$translatedFormFieldsCache[$cacheKey],
+            self::$fieldStringTranslationCache[$cacheKey],
             self::$formPackageCache[$cacheKey],
             self::$formModelCache[$cacheKey]
         );
